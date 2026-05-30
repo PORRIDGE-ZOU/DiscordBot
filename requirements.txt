@@ -8,3 +8,9 @@ python-dotenv>=1.0
 
 # Official Notion SDK. Synchronous client — call it off the event loop in async code.
 notion-client>=2.2
+
+# Scheduler for one-shot + weekly reminders. Pinned to the 3.x API (4.x is a
+# different API). SQLAlchemy backs the persistent SQLite jobstore so reminders
+# survive bot restarts.
+apscheduler>=3.10,<4
+SQLAlchemy>=2.0

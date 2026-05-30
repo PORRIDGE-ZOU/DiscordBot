@@ -12,6 +12,7 @@ import discord
 from dotenv import load_dotenv
 
 import notion_api
+import scheduler
 
 # Load DISCORD_TOKEN (and optional DISCORD_GUILD_ID) from the .env file into the
 # process environment. Must run before we read them below.
@@ -45,6 +46,9 @@ GUILD_IDS = [int(GUILD_ID)] if GUILD_ID else None
 async def on_ready():
     """Fires once after login + the gateway connection is established."""
     print(f"Logged in as {bot.user} (id: {bot.user.id})")
+    # Start the reminder scheduler now that the event loop is running and the bot
+    # is ready. This also reloads any reminders saved before the last restart.
+    scheduler.setup(bot)
     print("Bot is online. Press Ctrl+C to stop.")
 
 
@@ -156,6 +160,160 @@ async def tasks(
     if len(msg) > 1990:  # Discord caps a message at 2000 chars
         msg = msg[:1990] + "\n… (truncated)"
     await ctx.respond(msg)
+
+
+# --- Intro + help -----------------------------------------------------------
+INTRO_TEXT = (
+    "👋 I'm **Aboyeur**, the QLP team's helper bot. I can:\n"
+    "• 📋 Pull tasks from Notion — `/tasks` (filter by status)\n"
+    "• ⏰ Send reminders, one-time or weekly — `/remind_in`, `/remind_weekly`\n"
+    "• 🔎 Show which Notion pages I can read — `/notion_check`\n"
+    "• 🏓 Confirm I'm alive — `/ping`\n"
+    "Type `/help` for the full list."
+)
+
+
+@bot.slash_command(
+    name="intro",
+    description="Post a short intro of what the bot can do.",
+    guild_ids=GUILD_IDS,
+)
+async def intro(ctx: discord.ApplicationContext):
+    """Public — posts the capability blurb to the current channel."""
+    await ctx.respond(INTRO_TEXT)
+
+
+@bot.slash_command(
+    name="help",
+    description="List all commands and what they do.",
+    guild_ids=GUILD_IDS,
+)
+async def help_command(ctx: discord.ApplicationContext):
+    """Private — auto-generated from the registered slash commands so it never
+    drifts out of sync with what the bot actually offers."""
+    lines = ["**Commands:**"]
+    for cmd in sorted(bot.application_commands, key=lambda c: c.name):
+        lines.append(f"- `/{cmd.name}` — {cmd.description}")
+    await ctx.respond("\n".join(lines), ephemeral=True)
+
+
+# --- Reminders --------------------------------------------------------------
+def _bot_can_post(channel, guild):
+    """Whether the bot has permission to send messages in `channel`."""
+    return channel.permissions_for(guild.me).send_messages
+
+
+def _parse_hhmm(text):
+    """Parse 'HH:MM' 24-hour into (hour, minute). Raises ValueError if invalid."""
+    hour_str, minute_str = text.strip().split(":")
+    hour, minute = int(hour_str), int(minute_str)
+    if not (0 <= hour <= 23 and 0 <= minute <= 59):
+        raise ValueError("out of range")
+    return hour, minute
+
+
+@bot.slash_command(
+    name="remind_in",
+    description="Send a message once, a number of hours from now.",
+    guild_ids=GUILD_IDS,
+)
+async def remind_in(
+    ctx: discord.ApplicationContext,
+    message: discord.Option(str, description="What to send"),
+    hours: discord.Option(float, description="Hours from now (e.g. 1.5)"),
+    channel: discord.Option(discord.TextChannel, description="Channel to post in"),
+):
+    if hours <= 0:
+        await ctx.respond("Hours must be greater than 0.", ephemeral=True)
+        return
+    if not _bot_can_post(channel, ctx.guild):
+        await ctx.respond(
+            f"I don't have permission to post in {channel.mention}.", ephemeral=True
+        )
+        return
+    job_id, run_date = scheduler.schedule_once(channel.id, message, hours)
+    await ctx.respond(
+        f"⏰ Scheduled. I'll post in {channel.mention} at "
+        f"**{run_date:%Y-%m-%d %H:%M %Z}**.\nID: `{job_id}` — cancel with `/reminder_cancel`.",
+        ephemeral=True,
+    )
+
+
+@bot.slash_command(
+    name="remind_weekly",
+    description="Send a message every week on a chosen day + time (California).",
+    guild_ids=GUILD_IDS,
+)
+async def remind_weekly(
+    ctx: discord.ApplicationContext,
+    message: discord.Option(str, description="What to send"),
+    day: discord.Option(
+        str, description="Day of week", choices=list(scheduler.WEEKDAYS.keys())
+    ),
+    time: discord.Option(str, description="Time HH:MM, 24h, California (e.g. 09:30)"),
+    channel: discord.Option(discord.TextChannel, description="Channel to post in"),
+):
+    try:
+        hour, minute = _parse_hhmm(time)
+    except ValueError:
+        await ctx.respond(
+            "Time must be HH:MM 24-hour — e.g. `09:30` or `17:00`.", ephemeral=True
+        )
+        return
+    if not _bot_can_post(channel, ctx.guild):
+        await ctx.respond(
+            f"I don't have permission to post in {channel.mention}.", ephemeral=True
+        )
+        return
+    job_id = scheduler.schedule_weekly(
+        channel.id, message, scheduler.WEEKDAYS[day], hour, minute
+    )
+    await ctx.respond(
+        f"📅 Scheduled weekly: every **{day} at {time} PT** in {channel.mention}.\n"
+        f"ID: `{job_id}` — cancel with `/reminder_cancel`.",
+        ephemeral=True,
+    )
+
+
+@bot.slash_command(
+    name="reminders",
+    description="List active scheduled reminders.",
+    guild_ids=GUILD_IDS,
+)
+async def reminders(ctx: discord.ApplicationContext):
+    jobs = scheduler.list_jobs()
+    if not jobs:
+        await ctx.respond("No active reminders.", ephemeral=True)
+        return
+    lines = ["**Active reminders:**"]
+    for job in jobs:
+        when = (
+            job.next_run_time.strftime("%Y-%m-%d %H:%M %Z")
+            if job.next_run_time
+            else "—"
+        )
+        lines.append(f"- `{job.id}` — {job.name} (next: {when})")
+    body = "\n".join(lines)
+    if len(body) > 1990:
+        body = body[:1990] + "\n… (truncated)"
+    await ctx.respond(body, ephemeral=True)
+
+
+@bot.slash_command(
+    name="reminder_cancel",
+    description="Cancel a scheduled reminder by its ID.",
+    guild_ids=GUILD_IDS,
+)
+async def reminder_cancel(
+    ctx: discord.ApplicationContext,
+    id: discord.Option(str, description="Reminder ID (from /reminders)"),
+):
+    try:
+        scheduler.cancel(id)
+    except Exception:
+        await ctx.respond(f"No reminder with ID `{id}`.", ephemeral=True)
+        return
+    await ctx.respond(f"Cancelled reminder `{id}`.", ephemeral=True)
 
 
 # bot.run() opens the gateway connection and BLOCKS forever — the bot is a

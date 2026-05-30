@@ -1,0 +1,7 @@
+# Discord library. py-cord (Pycord) — chosen for built-in voice recording Sinks.
+# NOTE: py-cord and discord.py both install a module literally named `discord`.
+# Never install both into the same environment; they collide.
+py-cord>=2.6,<3
+
+# Loads secrets from a .env file into environment variables at startup.
+python-dotenv>=1.0

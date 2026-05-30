@@ -1,0 +1,16 @@
+# Secrets — the bot token lives here. NEVER commit this.
+.env
+
+# Python virtual environment
+venv/
+.venv/
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Meeting recordings + transcripts (added now so they never get committed later)
+recordings/
+transcripts/
+
+.DS_Store

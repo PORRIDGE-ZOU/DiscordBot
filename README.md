@@ -38,6 +38,14 @@ Edit `.env` and paste your real `DISCORD_TOKEN`. Optionally set `DISCORD_GUILD_I
 (your server ID) so slash commands appear instantly during development — see the
 comments in `.env.example` for how to get it.
 
+### Notion connection (for the Notion features)
+1. https://www.notion.so/my-integrations → **+ New connection** → name it, pick the
+   workspace, type **Internal** → create.
+2. Copy the **Internal Integration Secret** (`ntn_...`) into `.env` as `NOTION_TOKEN`.
+3. **Share pages with it** (required — the connection sees nothing otherwise): open
+   the team's top page (and the task database) → `•••` → **Connections** → add the
+   connection. Sharing a page cascades to its child pages.
+
 ### 4. Install dependencies
 ```bash
 python3 -m venv venv
@@ -67,4 +75,6 @@ hosting (a small VPS or Pi) comes later.
 
 | Command | What it does |
 |---------|--------------|
-| `/ping` | Replies `pong 🏓`. Confirms the bot is alive. |
+| `/ping` | Replies `pong! 🏓`. Confirms the bot is alive. |
+| `/notion_check` | Lists the Notion pages/databases the connection can see (ephemeral). Confirms the Notion link works. |
+| `/tasks status:<choice>` | Lists tasks from the Notion task DB filtered by status: Done, In progress, Not started, Pivoted, or **Active** (In progress + Not started). Public. Needs `NOTION_TASKS_DB_ID`. |

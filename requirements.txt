@@ -5,3 +5,6 @@ py-cord>=2.6,<3
 
 # Loads secrets from a .env file into environment variables at startup.
 python-dotenv>=1.0
+
+# Official Notion SDK. Synchronous client — call it off the event loop in async code.
+notion-client>=2.2

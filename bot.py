@@ -7,12 +7,14 @@ slash command -> response) before any feature is added.
 
 import asyncio
 import os
+from datetime import datetime, timedelta
 
 import discord
 from dotenv import load_dotenv
 
 import notion_api
 import scheduler
+import store
 
 # Load DISCORD_TOKEN (and optional DISCORD_GUILD_ID) from the .env file into the
 # process environment. Must run before we read them below.
@@ -46,6 +48,8 @@ GUILD_IDS = [int(GUILD_ID)] if GUILD_ID else None
 async def on_ready():
     """Fires once after login + the gateway connection is established."""
     print(f"Logged in as {bot.user} (id: {bot.user.id})")
+    # Create the local bot-state tables (associations + sprint config) if missing.
+    store.init()
     # Start the reminder scheduler now that the event loop is running and the bot
     # is ready. This also reloads any reminders saved before the last restart.
     scheduler.setup(bot)
@@ -105,70 +109,329 @@ async def notion_check(ctx: discord.ApplicationContext):
     )
 
 
-# Maps each dropdown choice to the Notion Status value(s) it filters by.
-# "Active" expands to In progress + Not started (everything not Done/Pivoted).
-TASK_STATUS_CHOICES = {
-    "Done": ["Done"],
-    "In progress": ["In progress"],
-    "Not started": ["Not started"],
-    "Pivoted": ["Pivoted"],
-    "Active": notion_api.ACTIVE_STATUSES,
-}
+# --- Sprint + personal task commands (Milestone 4) ---------------------------
+# These bind a Discord user to a Notion person (/associate), then filter the Task
+# Tracker by that person + the active sprint. Bot state (the binding, the sprint)
+# lives in the local store.py SQLite, NOT in Notion — Notion stays read-only.
+
+
+def _truncate(text, limit):
+    return text if len(text) <= limit else text[: limit - 1] + "…"
+
+
+def _personal_sorted(tasks):
+    """Deterministic order shared by /tasks, /taskdetail, /remind so a given task
+    has the SAME number across all three: by Due date ascending (no-due-date last),
+    tiebreak by Task name. ISO date strings sort correctly lexicographically."""
+    return sorted(
+        tasks,
+        key=lambda t: (0 if t.get("due") else 1, t.get("due") or "", t.get("name", "").lower()),
+    )
+
+
+async def _load_personal_tasks(ctx):
+    """Shared loader for the personal-task commands. Resolves the caller's Notion
+    person + the current sprint, queries their tasks, returns them sorted. If the
+    caller isn't linked or no sprint is set, it sends the right error (ephemeral)
+    and returns None — the caller just checks for None and stops.
+
+    Assumes ctx.defer(ephemeral=True) was already called.
+    """
+    assoc = await asyncio.to_thread(store.get_association, ctx.author.id)
+    if not assoc:
+        await ctx.respond("You're not linked yet — run `/associate` first.", ephemeral=True)
+        return None
+    sprint = await asyncio.to_thread(store.get_current_sprint)
+    if sprint is None:
+        await ctx.respond("No sprint set yet — run `/setsprint`.", ephemeral=True)
+        return None
+    tasks = await asyncio.to_thread(
+        notion_api.query_tasks, assoc["notion_user_id"], sprint, None
+    )
+    return assoc, sprint, _personal_sorted(tasks)
+
+
+@bot.slash_command(
+    name="associate",
+    description="Link a Notion account (by email) to a Discord member for task queries.",
+    guild_ids=GUILD_IDS,
+)
+async def associate(
+    ctx: discord.ApplicationContext,
+    email: discord.Option(str, description="The person's Notion account email"),
+    member: discord.Option(discord.Member, description="The Discord member to link"),
+):
+    """Bind a Notion email <-> a Discord member. The member is a user-PICKER, so
+    Discord guarantees it's a real server member (and hands us the stable user ID).
+    The email is validated against the Notion workspace before binding."""
+    await ctx.defer(ephemeral=True)
+    try:
+        user = await asyncio.to_thread(notion_api.find_user_by_email, email)
+    except Exception as e:
+        await ctx.respond(f"Notion error: `{e}`", ephemeral=True)
+        return
+    if not user:
+        await ctx.respond(
+            f"`{email}` isn't a member of the Notion workspace. Nothing changed.",
+            ephemeral=True,
+        )
+        return
+
+    result = await asyncio.to_thread(
+        store.set_association, member.id, user["id"], user["name"], email
+    )
+    prev_d = result["prev_by_discord"]
+    prev_e = result["prev_by_email"]
+    notes = []
+    if prev_d and prev_d["email"].lower() != email.lower():
+        notes.append(f"{member.mention} was linked to `{prev_d['email']}`")
+    if prev_e and prev_e["discord_id"] != member.id:
+        notes.append(f"`{email}` was linked to <@{prev_e['discord_id']}>")
+
+    bind = f"{member.mention} ↔ **{user['name']}** (`{email}`)"
+    if notes:
+        await ctx.respond(
+            "⚠️ This was already bound! " + "; ".join(notes) + f". Now re-bound: {bind}.",
+            ephemeral=True,
+        )
+    else:
+        await ctx.respond(f"✅ Linked {bind}.", ephemeral=True)
 
 
 @bot.slash_command(
     name="tasks",
-    description="List tasks from Notion filtered by status.",
+    description="List your tasks in the current sprint.",
     guild_ids=GUILD_IDS,
 )
-async def tasks(
+async def tasks(ctx: discord.ApplicationContext):
+    """The caller's own tasks for the active sprint. Ephemeral (personal)."""
+    await ctx.defer(ephemeral=True)
+    loaded = await _load_personal_tasks(ctx)
+    if loaded is None:
+        return
+    _assoc, sprint, items = loaded
+    if not items:
+        await ctx.respond(f"No tasks assigned to you in **Sprint {sprint}**.", ephemeral=True)
+        return
+    lines = []
+    for i, t in enumerate(items, 1):
+        parts = [f"**{t['name']}**", t["status"] or "—"]
+        if t["due"]:
+            parts.append(f"📅 {t['due']}")
+        if t["description"]:
+            parts.append(_truncate(t["description"], 80))
+        lines.append(f"{i}. " + " — ".join(parts))
+    body = f"**Your tasks — Sprint {sprint}** ({len(items)}):\n" + "\n".join(lines)
+    await ctx.respond(_truncate(body, 1990), ephemeral=True)
+
+
+@bot.slash_command(
+    name="taskdetail",
+    description="Show full details for one of your tasks, by its number from /tasks.",
+    guild_ids=GUILD_IDS,
+)
+async def taskdetail(
     ctx: discord.ApplicationContext,
-    status: discord.Option(
-        str,
-        description="Which tasks to show",
-        choices=list(TASK_STATUS_CHOICES.keys()),
+    number: discord.Option(int, description="Task number shown in /tasks"),
+):
+    """All properties of one task. Uses the same ordered list as /tasks, so the
+    number lines up with what /tasks showed. Ephemeral."""
+    await ctx.defer(ephemeral=True)
+    loaded = await _load_personal_tasks(ctx)
+    if loaded is None:
+        return
+    _assoc, sprint, items = loaded
+    if number < 1 or number > len(items):
+        await ctx.respond(
+            f"No task #{number}. You have {len(items)} task(s) in Sprint {sprint} — run `/tasks`.",
+            ephemeral=True,
+        )
+        return
+    t = items[number - 1]
+    lines = [
+        f"**{t['name']}**",
+        f"• Status: {t['status'] or '—'}",
+        f"• Assignee: {t['assignee'] or '—'}",
+        f"• Due Date: {t['due'] or '—'}",
+        f"• Priority: {t['priority'] or '—'}",
+        f"• Department: {t['department'] or '—'}",
+        f"• Sprint: {t['sprint'] or '—'}",
+        f"• Updated At: {t['updated'] or '—'}",
+        f"• Description: {t['description'] or '—'}",
+    ]
+    await ctx.respond(_truncate("\n".join(lines), 1990), ephemeral=True)
+
+
+@bot.slash_command(
+    name="setsprint",
+    description="Set the team's current sprint number.",
+    guild_ids=GUILD_IDS,
+)
+async def setsprint(
+    ctx: discord.ApplicationContext,
+    x: discord.Option(int, description="Sprint number, e.g. 2"),
+):
+    """Set the active sprint (shared team state). Anyone can run it."""
+    await ctx.defer(ephemeral=True)
+    if x < 1:
+        await ctx.respond("Sprint number must be a positive integer.", ephemeral=True)
+        return
+    await asyncio.to_thread(store.set_current_sprint, x)
+    await ctx.respond(f"✅ Current sprint set to **Sprint {x}**.", ephemeral=True)
+
+
+@bot.slash_command(
+    name="sprint",
+    description="Show the current sprint.",
+    guild_ids=GUILD_IDS,
+)
+async def sprint(ctx: discord.ApplicationContext):
+    """Public — report the active sprint number."""
+    await ctx.defer()
+    s = await asyncio.to_thread(store.get_current_sprint)
+    if s is None:
+        await ctx.respond("No sprint set yet — run `/setsprint`.")
+    else:
+        await ctx.respond(f"We're in **Sprint {s}**!")
+
+
+@bot.slash_command(
+    name="sprinttasks",
+    description="List all tasks in the current sprint, optionally filtered by department.",
+    guild_ids=GUILD_IDS,
+)
+async def sprinttasks(
+    ctx: discord.ApplicationContext,
+    department: discord.Option(
+        str, description="Filter by department (optional)", required=False, default=None
     ),
 ):
-    """List tasks whose Status matches the chosen filter.
-
-    Public reply (the whole team sees it). defer() first because the Notion
-    round-trip can exceed the 3-second interaction limit; the sync SDK runs off
-    the event loop via asyncio.to_thread.
-    """
+    """Public team view of the whole sprint. No department -> grouped by the fixed
+    department order; with a department -> just that one (validated against the
+    Notion Department options)."""
     await ctx.defer()
-    statuses = TASK_STATUS_CHOICES[status]
+    sprint_num = await asyncio.to_thread(store.get_current_sprint)
+    if sprint_num is None:
+        await ctx.respond("No sprint set yet — run `/setsprint`.")
+        return
+
+    if department:
+        try:
+            valid = await asyncio.to_thread(notion_api.get_department_options)
+        except Exception as e:
+            await ctx.respond(f"Notion error: `{e}`")
+            return
+        match = next((d for d in valid if d.lower() == department.lower()), None)
+        if not match:
+            await ctx.respond(
+                f"Unknown department **{department}**. Valid: "
+                f"{', '.join(valid) if valid else '(none defined)'}."
+            )
+            return
+        department = match  # normalize to the canonical Notion name
+
     try:
-        rows = await asyncio.to_thread(notion_api.query_tasks_by_status, statuses)
+        items = await asyncio.to_thread(
+            notion_api.query_tasks, None, sprint_num, department
+        )
     except Exception as e:
         await ctx.respond(f"Notion error: `{e}`")
         return
-
-    if not rows:
-        await ctx.respond(f"No tasks with status **{status}**.")
+    if not items:
+        where = f" in **{department}**" if department else ""
+        await ctx.respond(f"No tasks{where} in **Sprint {sprint_num}**.")
         return
 
-    lines = []
-    for t in rows:
-        parts = [f"**{t['name']}**"]
-        if t["assignee"]:
-            parts.append(f"👤 {t['assignee']}")
-        if t["due"]:
-            parts.append(f"📅 {t['due']}")
-        lines.append("- " + " · ".join(parts))
+    if department:
+        items.sort(key=lambda t: t["name"].lower())
+        lines = [
+            f"{i}. **{t['name']}** — {t['status'] or '—'} — 👤 {t['assignee'] or '—'}"
+            for i, t in enumerate(items, 1)
+        ]
+        header = f"**Sprint {sprint_num} — {department}** ({len(items)}):"
+    else:
+        rank = {d: i for i, d in enumerate(notion_api.DEPARTMENT_ORDER)}
+        items.sort(key=lambda t: (rank.get(t["department"], len(rank)), t["name"].lower()))
+        lines = [
+            f"{i}. **{t['name']}** — {t['status'] or '—'} — 👤 {t['assignee'] or '—'} — 🏷️ {t['department'] or '—'}"
+            for i, t in enumerate(items, 1)
+        ]
+        header = f"**Sprint {sprint_num} — all tasks** ({len(items)}):"
 
-    msg = f"Tasks — **{status}** ({len(rows)}):\n" + "\n".join(lines)
-    if len(msg) > 1990:  # Discord caps a message at 2000 chars
-        msg = msg[:1990] + "\n… (truncated)"
-    await ctx.respond(msg)
+    await ctx.respond(_truncate(header + "\n" + "\n".join(lines), 1990))
+
+
+@bot.slash_command(
+    name="remind",
+    description="DM yourself a set number of days before each of your tasks is due.",
+    guild_ids=GUILD_IDS,
+)
+async def remind(
+    ctx: discord.ApplicationContext,
+    x: discord.Option(int, description="Days before each due date to remind you"),
+):
+    """For each of the caller's current-sprint tasks WITH a due date, schedule one
+    DM x days before that task's due date. Re-running replaces the caller's previous
+    batch (no duplicate stacking). Task text is snapshotted now."""
+    await ctx.defer(ephemeral=True)
+    if x < 0:
+        await ctx.respond("Days must be 0 or more.", ephemeral=True)
+        return
+    loaded = await _load_personal_tasks(ctx)
+    if loaded is None:
+        return
+    _assoc, _sprint, items = loaded
+
+    # Clear this user's old task reminders first, then reschedule fresh.
+    await asyncio.to_thread(scheduler.clear_task_reminders, ctx.author.id)
+
+    now = datetime.now(scheduler.CALIFORNIA)
+    scheduled = 0
+    skipped = 0
+    for t in items:
+        run_date = _reminder_datetime(t["due"], x)
+        if run_date is None or run_date <= now:
+            skipped += 1  # no due date, or the reminder moment is already past
+            continue
+        days_phrase = "today" if x == 0 else f"in {x} day{'s' if x != 1 else ''}"
+        content = (
+            f"⏰ **Reminder:** your task **{t['name']}** is due on **{t['due']}** "
+            f"({days_phrase}).\nStatus: {t['status'] or '—'}"
+        )
+        if t["description"]:
+            content += f"\n{_truncate(t['description'], 200)}"
+        scheduler.schedule_task_reminder(ctx.author.id, run_date, content, scheduled)
+        scheduled += 1
+
+    await ctx.respond(
+        f"Scheduled **{scheduled}** reminder(s), {x} day(s) before each due date. "
+        f"Skipped **{skipped}** (no due date / already past).",
+        ephemeral=True,
+    )
+
+
+def _reminder_datetime(due, x):
+    """Notion due value (ISO date or datetime) minus x days -> a tz-aware datetime
+    at 09:00 California on the reminder day, or None if `due` is empty/unparseable."""
+    if not due:
+        return None
+    try:
+        d = datetime.strptime(due[:10], "%Y-%m-%d").date()  # tolerate date or datetime
+    except ValueError:
+        return None
+    day = d - timedelta(days=x)
+    return datetime(day.year, day.month, day.day, 9, 0, tzinfo=scheduler.CALIFORNIA)
 
 
 # --- Intro + help -----------------------------------------------------------
 INTRO_TEXT = (
     "👋 I'm **Aboyeur**, the QLP team's helper bot. I can:\n"
-    "• 📋 Pull tasks from Notion — `/tasks` (filter by status)\n"
-    "• ⏰ Send reminders, one-time or weekly — `/remind_in`, `/remind_weekly`\n"
-    "• 🔎 Show which Notion pages I can read — `/notion_check`\n"
-    "• 🏓 Confirm I'm alive — `/ping`\n"
+    "• 🔗 Link your Notion account — `/associate`\n"
+    "• 📋 Show your sprint tasks — `/tasks`, `/taskdetail`\n"
+    "• 🗂️ Show the whole sprint — `/sprinttasks` (optionally by department)\n"
+    "• 🏃 Track the sprint — `/sprint`, `/setsprint`\n"
+    "• ⏰ Remind you before tasks are due — `/remind`\n"
+    "• ⏲️ Channel reminders, one-time or weekly — `/remind_in`, `/remind_weekly`\n"
     "Type `/help` for the full list."
 )
 

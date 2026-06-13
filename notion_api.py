@@ -67,14 +67,65 @@ def _rich_text_to_plain(rich):
     return "".join(piece.get("plain_text", "") for piece in rich)
 
 
+# --- Workspace users (for /associate) ----------------------------------------
+def list_workspace_users():
+    """Return [{"id", "name", "email"}, ...] for every PERSON in the workspace.
+
+    Bots and any user without an email come back with email=None. Used by
+    /associate to confirm an email belongs to a real Notion member before binding.
+    Needs the integration's "read user information" capability.
+    """
+    client = _get_client()
+    users = []
+    cursor = None
+    while True:
+        kwargs = {"start_cursor": cursor} if cursor else {}
+        resp = client.users.list(**kwargs)
+        for u in resp["results"]:
+            if u.get("type") != "person":
+                continue  # skip bot users
+            email = (u.get("person") or {}).get("email")
+            users.append({"id": u["id"], "name": u.get("name", ""), "email": email})
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return users
+
+
+def find_user_by_email(email):
+    """Return {"id","name","email"} for the workspace person with this email
+    (case-insensitive), or None if no one matches."""
+    target = email.strip().lower()
+    for u in list_workspace_users():
+        if u["email"] and u["email"].lower() == target:
+            return u
+    return None
+
+
 # --- Task database queries ---------------------------------------------------
-# Status values that count as "Active": everything not Done and not Pivoted.
-ACTIVE_STATUSES = ["In progress", "Not started"]
+# Property names in the Task Tracker DB. If a Notion column is renamed, change it
+# HERE — every filter and extractor reads from these constants.
+PROP_NAME = "Task name"
+PROP_STATUS = "Status"
+PROP_ASSIGNEE = "Assignee"
+PROP_DUE = "Due date"
+PROP_PRIORITY = "Priority"
+PROP_DEPARTMENT = "Department"
+PROP_DESCRIPTION = "Description"
+PROP_SPRINT = "Sprint"
+PROP_UPDATED = "Updated at"
+
+# Fixed display order for /sprinttasks. A task whose department isn't listed here
+# sorts to the end.
+DEPARTMENT_ORDER = [
+    "Production", "Narrative", "Design", "Art", "Engineering", "QA", "Audio",
+]
 
 # Notion's 2025 API splits a database into one or more "data sources"; the rows
 # live in a data source and the query endpoint targets it, not the database. We
 # resolve the database id (NOTION_TASKS_DB_ID) to its data source id once and cache.
 _data_source_id = None
+_schema = None  # cached {prop_name: {"type": ..., ...}} for the task data source
 
 
 def _get_tasks_data_source_id():
@@ -94,51 +145,110 @@ def _get_tasks_data_source_id():
     return _data_source_id
 
 
-def query_tasks_by_status(statuses):
-    """Return tasks whose Status is one of `statuses`.
+def _get_schema():
+    """Retrieve + cache the task data source's property schema (name -> definition).
 
-    `statuses` is a list of Status names. One value -> an `equals` filter; several
-    -> an OR. The filter runs SERVER-SIDE — Notion does the filtering and only
-    matching rows come back; we never fetch the whole table and filter in Python.
-    Returns [{"name": ..., "assignee": ..., "due": ...}, ...].
+    Lets us build the correct filter shape for each property from its TYPE (a
+    select, status, and rich_text each take a different filter), instead of
+    hardcoding — and exposes the Department select options for validation.
+    """
+    global _schema
+    if _schema is None:
+        client = _get_client()
+        ds = client.data_sources.retrieve(_get_tasks_data_source_id())
+        _schema = ds.get("properties", {})
+    return _schema
+
+
+def get_department_options():
+    """Valid Department names = the (multi_)select options defined in Notion."""
+    prop = _get_schema().get(PROP_DEPARTMENT, {})
+    ptype = prop.get("type")
+    if ptype in ("select", "multi_select"):
+        return [o["name"] for o in prop.get(ptype, {}).get("options", [])]
+    return []
+
+
+def _eq_filter(prop_name, value):
+    """An equals/contains filter for `prop_name`, shaped by the property's type."""
+    ptype = _get_schema().get(prop_name, {}).get("type")
+    if ptype == "select":
+        return {"property": prop_name, "select": {"equals": value}}
+    if ptype == "multi_select":
+        return {"property": prop_name, "multi_select": {"contains": value}}
+    if ptype == "status":
+        return {"property": prop_name, "status": {"equals": value}}
+    if ptype in ("rich_text", "title"):
+        return {"property": prop_name, ptype: {"equals": value}}
+    # Unknown/number/etc. — fall back to rich_text equals so the call still runs.
+    return {"property": prop_name, "rich_text": {"equals": value}}
+
+
+def query_tasks(assignee_id=None, sprint=None, department=None):
+    """Query the Task Tracker with optional AND filters; return full task dicts.
+
+      assignee_id: Notion user id -> tasks whose Assignee contains them.
+      sprint:      int            -> tasks whose Sprint == "Sprint{n}".
+      department:  str            -> tasks whose Department == that name.
+
+    Filtering is SERVER-SIDE — Notion returns only matching rows; we never fetch
+    the whole table and filter in Python. Paginates.
     """
     client = _get_client()
-    data_source_id = _get_tasks_data_source_id()
+    ds_id = _get_tasks_data_source_id()
 
-    if len(statuses) == 1:
-        notion_filter = {"property": "Status", "status": {"equals": statuses[0]}}
+    clauses = []
+    if assignee_id:
+        clauses.append({"property": PROP_ASSIGNEE, "people": {"contains": assignee_id}})
+    if sprint is not None:
+        clauses.append(_eq_filter(PROP_SPRINT, f"Sprint{sprint}"))
+    if department:
+        clauses.append(_eq_filter(PROP_DEPARTMENT, department))
+
+    if len(clauses) == 1:
+        notion_filter = clauses[0]
+    elif len(clauses) > 1:
+        notion_filter = {"and": clauses}
     else:
-        notion_filter = {
-            "or": [{"property": "Status", "status": {"equals": s}} for s in statuses]
-        }
+        notion_filter = None
 
     tasks = []
     cursor = None
     while True:
-        kwargs = {"filter": notion_filter}
+        kwargs = {}
+        if notion_filter:
+            kwargs["filter"] = notion_filter
         if cursor:
             kwargs["start_cursor"] = cursor
-        # 2025 API: query the data source, not the database.
-        resp = client.data_sources.query(data_source_id, **kwargs)
+        resp = client.data_sources.query(ds_id, **kwargs)
         for page in resp["results"]:
-            tasks.append(_task_summary(page))
+            tasks.append(_task_full(page))
         if not resp.get("has_more"):
             break
         cursor = resp.get("next_cursor")
     return tasks
 
 
-def _task_summary(page):
-    """Extract the fields we display from a task page. Property names match the
-    'Test Tasks Tracker' DB: 'Task name' (title), 'Assignee' (people), 'Due date'."""
+def _task_full(page):
+    """Flatten every displayed property of a task page into a plain dict. Each
+    extractor reads the property by its own type, so this is robust to whether
+    e.g. Sprint/Priority are select or text columns."""
     props = page.get("properties", {})
     return {
-        "name": _prop_title(props.get("Task name")),
-        "assignee": _prop_people(props.get("Assignee")),
-        "due": _prop_date(props.get("Due date")),
+        "id": page["id"],
+        "name": _prop_title(props.get(PROP_NAME)),
+        "status": _prop_status(props.get(PROP_STATUS)),
+        "assignee": _prop_people(props.get(PROP_ASSIGNEE)),
+        "due": _prop_date(props.get(PROP_DUE)),
+        "priority": _prop_select(props.get(PROP_PRIORITY)),
+        "department": _prop_select(props.get(PROP_DEPARTMENT)),
+        "description": _prop_rich_text(props.get(PROP_DESCRIPTION)),
+        "sprint": _prop_select(props.get(PROP_SPRINT)),
+        "updated": _prop_timeish(props.get(PROP_UPDATED)),
     }
 
 
+# --- Per-type property extractors --------------------------------------------
 def _prop_title(prop):
     if not prop:
         return "(untitled)"
@@ -157,3 +267,45 @@ def _prop_date(prop):
         return ""
     date = prop.get("date")
     return date.get("start", "") if date else ""
+
+
+def _prop_status(prop):
+    if not prop:
+        return ""
+    st = prop.get("status")
+    return st.get("name", "") if st else ""
+
+
+def _prop_select(prop):
+    """select / multi_select / rich_text / title -> a single display string."""
+    if not prop:
+        return ""
+    ptype = prop.get("type")
+    if ptype == "select":
+        sel = prop.get("select")
+        return sel.get("name", "") if sel else ""
+    if ptype == "multi_select":
+        return ", ".join(o.get("name", "") for o in prop.get("multi_select", []))
+    if ptype in ("rich_text", "title"):
+        return _rich_text_to_plain(prop.get(ptype, []))
+    return ""
+
+
+def _prop_rich_text(prop):
+    if not prop:
+        return ""
+    ptype = prop.get("type", "rich_text")
+    return _rich_text_to_plain(prop.get(ptype, []))
+
+
+def _prop_timeish(prop):
+    """last_edited_time / created_time / date -> ISO string."""
+    if not prop:
+        return ""
+    ptype = prop.get("type")
+    if ptype in ("last_edited_time", "created_time"):
+        return prop.get(ptype, "")
+    if ptype == "date":
+        d = prop.get("date")
+        return d.get("start", "") if d else ""
+    return ""

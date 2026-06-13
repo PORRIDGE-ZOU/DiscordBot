@@ -21,21 +21,29 @@ one feature at a time and is expected to grow.
 **Built and working today:**
 - `/ping` — liveness check.
 - `/notion_check` — lists every Notion page/database the bot's connection can see.
-- `/tasks status:<choice>` — task list filtered by status (Done / In progress /
-  Not started / Pivoted / **Active**, where Active = In progress + Not started).
+- `/intro`, `/help` — capability blurb (public) and the auto-generated command list.
+- **Sprint + personal tasks:** `/associate` (link a Notion email to a Discord
+  member), `/tasks` + `/taskdetail` (your own tasks this sprint), `/setsprint` +
+  `/sprint`, `/sprinttasks [department]` (the whole sprint). See
+  `../deep-dives/notion-task-queries.md`.
+- **Reminders:** `/remind` (DM before each of your tasks is due) plus channel
+  reminders `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel`.
 
 ## How the code is laid out
 
-The bot is a single long-lived Python process. Two source files today:
+The bot is a single long-lived Python process. Source files:
 
 | File | Responsibility |
 | --- | --- |
-| `bot.py` | **Discord only.** Intents, slash-command registration, the command handlers, `bot.run()`. It never talks to Notion directly — it calls into `notion_api`. |
-| `notion_api.py` | **All Notion calls.** Search, task queries, the data-source resolution, and the helpers that turn Notion's JSON into plain values. |
+| `bot.py` | **Discord only.** Intents, slash-command registration, the command handlers, `bot.run()`. Talks to Notion via `notion_api`, bot state via `store`, reminders via `scheduler`. |
+| `notion_api.py` | **All Notion calls (read-only).** Search, workspace-user lookup, task queries (data-source resolution + schema-aware filters), and the helpers that turn Notion's JSON into plain values. |
+| `scheduler.py` | **Reminders.** APScheduler with a persistent SQLite jobstore (`jobs.sqlite`) — channel reminders and per-task DM reminders, both surviving restarts. |
+| `store.py` | **Local bot state.** Discord↔Notion associations and the active sprint, in a small SQLite (`botstate.db`). Not in Notion. |
 
-New integrations (Whisper, the scheduler, voice recording) will be added as their
-own modules alongside `notion_api.py`, keeping `bot.py` a thin Discord layer. See
-`../deep-dives/` as those land.
+Notion stays **read-only** — the bot never writes to it. State the bot owns
+(who's linked to whom, the current sprint) lives in `store.py`'s local SQLite.
+New integrations (Whisper, voice recording) will be added as their own modules,
+keeping `bot.py` a thin Discord layer. See `../deep-dives/` as those land.
 
 ## The one pattern that runs through every command
 

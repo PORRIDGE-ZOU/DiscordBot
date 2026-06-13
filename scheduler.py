@@ -99,11 +99,59 @@ def schedule_weekly(channel_id, content, day_token, hour, minute):
 
 
 def list_jobs():
-    """Active reminders, each with .id, .name, .next_run_time."""
-    return _scheduler.get_jobs()
+    """Active CHANNEL reminders (for /reminders), each with .id, .name,
+    .next_run_time. Per-task DM reminders (/remind) are excluded — they're managed
+    per user, not listed here."""
+    return [
+        j
+        for j in _scheduler.get_jobs()
+        if not j.id.startswith(_TASK_REMINDER_PREFIX + ":")
+    ]
 
 
 def cancel(job_id):
     """Remove a reminder. Raises apscheduler.jobstores.base.JobLookupError if the
     id doesn't exist."""
     _scheduler.remove_job(job_id)
+
+
+# --- Per-task DM reminders (/remind) -----------------------------------------
+# /remind schedules one DM per task, fired some days before each task's due date.
+# These jobs are namespaced with this prefix in their id so they can be (a) cleared
+# per user when /remind is re-run and (b) hidden from /reminders, which is meant for
+# the channel reminders above.
+_TASK_REMINDER_PREFIX = "taskremind"
+
+
+async def _send_task_dm(discord_id, content):
+    """DM a Discord user. Module-level so persistent jobs can reference it."""
+    user = _bot.get_user(discord_id)
+    if user is None:
+        # Not in cache (e.g. just after a restart) — fetch from the API.
+        user = await _bot.fetch_user(discord_id)
+    await user.send(content)
+
+
+def clear_task_reminders(discord_id):
+    """Remove all of one user's pending task reminders (called before /remind
+    reschedules, so re-running it never stacks duplicates)."""
+    prefix = f"{_TASK_REMINDER_PREFIX}:{discord_id}:"
+    for job in _scheduler.get_jobs():
+        if job.id.startswith(prefix):
+            _scheduler.remove_job(job.id)
+
+
+def schedule_task_reminder(discord_id, run_date, content, index):
+    """Schedule one DM to `discord_id` at `run_date` (tz-aware). `index` makes the
+    job id unique within this user's batch. Returns the job id."""
+    job_id = f"{_TASK_REMINDER_PREFIX}:{discord_id}:{index}"
+    _scheduler.add_job(
+        _send_task_dm,
+        trigger=DateTrigger(run_date=run_date),
+        args=[discord_id, content],
+        id=job_id,
+        replace_existing=True,
+        name=f"task reminder -> user {discord_id}",
+        misfire_grace_time=_MISFIRE_GRACE,
+    )
+    return job_id

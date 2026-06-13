@@ -23,6 +23,19 @@ Established as the bot is built. Follow these; don't introduce a second way.
 
 ## The IO command pattern (follow for every slow command)
 defer() -> asyncio.to_thread(sync SDK) -> respond(), truncated to 2000 chars.
+Applies to sqlite (store.py) too — it's blocking; wrap in to_thread.
+
+## Bot state (Milestone 4)
+- Bot-owned state (associations, current sprint) lives in store.py SQLite
+  (botstate.db), NOT in Notion. Notion stays READ-ONLY. botstate.db is gitignored
+  live state, same handling as jobs.sqlite.
+- Notion property names are constants (PROP_* in notion_api.py) — rename in one
+  place. Filters are built type-aware from the cached data-source schema
+  (_eq_filter), never hardcoded per type.
+- Personal-task commands (/tasks, /taskdetail, /remind) MUST share the one loader
+  (_load_personal_tasks) + sort (_personal_sorted) so task numbers stay consistent.
+- Per-task DM reminder jobs are namespaced "taskremind:<discord_id>:<i>"; keep them
+  out of /reminders (channel-only).
 
 ## Discord landmines baked into the code
 - Intents in code MUST match the portal toggles or events arrive empty.

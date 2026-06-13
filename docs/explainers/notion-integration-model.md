@@ -63,10 +63,17 @@ implementation called it and failed with:
    `data_sources` list; we take the first one's id and **cache it**.
 3. We query that data source: `data_sources.query(data_source_id, filter=...)`.
 
-`notion_api._get_tasks_data_source_id()` does steps 1–2; `query_tasks_by_status`
-does step 3. Storing the database id (stable, copy-pasteable from the URL) and
-resolving the data source from it keeps configuration simple — you never have to
-hunt for a data source id by hand.
+`notion_api._get_tasks_data_source_id()` does steps 1–2; `query_tasks` does step 3.
+Storing the database id (stable, copy-pasteable from the URL) and resolving the data
+source from it keeps configuration simple — you never have to hunt for a data source
+id by hand.
+
+There's a fourth call worth knowing: `data_sources.retrieve(data_source_id)` returns
+the data source's **schema** — every property and its type, and a select column's
+options. The bot fetches this once (cached in `notion_api._schema`) so it can build
+the correct filter shape per property type instead of hardcoding, and so
+`/sprinttasks` can list the valid Department names. See
+`../deep-dives/notion-task-queries.md`.
 
 ## Server-side filtering
 
@@ -86,8 +93,25 @@ The bot never downloads the whole table and filters in Python. It sends Notion a
 
 `"status"` here is the filter type for Notion's **Status** property (distinct from
 a Select property — they filter differently). The property name `"Status"` must
-match the column name in Notion exactly; rename the column and the code string
-must change with it. The same is true for `Task name`, `Assignee`, and `Due date`.
+match the column name in Notion exactly; rename the column and the code constant
+must change with it (the names live as `PROP_*` constants in `notion_api.py`). The
+same is true for `Task name`, `Assignee`, `Due date`, `Sprint`, `Department`, etc.
 
-This server-side approach is what makes `/tasks` fast and what will let later
-queries (assignee = me, due this week) scale without pulling everything.
+Because different property types need different filter shapes, the bot doesn't
+hardcode them: `_eq_filter` looks up each property's type in the cached schema and
+builds the matching clause (a `select` `equals`, a `status` `equals`, a `rich_text`
+`equals`, …). The assignee filter uses the **People** type:
+`{"property": "Assignee", "people": {"contains": <notion user id>}}` — which is why
+`/associate` stores the Notion **user id**, not just the email.
+
+This server-side approach is what makes the task commands fast and lets compound
+queries (assignee = me **and** sprint = current) scale without pulling everything.
+
+## Looking up people: `users.list`
+
+`/associate` checks that an email belongs to a real Notion member before binding it.
+That uses `users.list` (paged through in `notion_api.list_workspace_users`), which
+returns every person and bot in the workspace. It requires the connection's **"Read
+user information"** capability (Configuration → Capabilities in the connection
+settings) — without it the call returns nothing and no email will validate. Bot users
+and anyone without an email are skipped.

@@ -50,13 +50,9 @@ ssh -i /Users/porridge/Desktop/Jobs/TGC/steam_scraper/steam_key.pem ec2-user@3.1
    ```bash
    sudo dnf -y install python3.11 python3.11-pip git
    ```
-3. **Code** — from your Mac (no `sudo` needed):
-   ```bash
-   rsync -av -e "ssh -i ~/Desktop/Jobs/TGC/steam_scraper/steam_key.pem" \
-     --exclude venv --exclude .env --exclude .git --exclude __pycache__ --exclude '.DS_Store' \
-     ~/Desktop/usccourse/DiscordBot/ ec2-user@3.151.10.101:/home/ec2-user/DiscordBot/
-   ```
-   (Paste as ONE line — backslash continuations break if blank lines sneak in.)
+3. **Code** — pulled from GitHub (see "Code sync via GitHub" below). The repo is
+   cloned to `~/DiscordBot`; `.env`, `venv/`, and `jobs.sqlite` are gitignored and
+   live only on the server.
 4. **Secrets + venv** — on the server:
    ```bash
    cd ~/DiscordBot
@@ -91,6 +87,33 @@ ssh -i /Users/porridge/Desktop/Jobs/TGC/steam_scraper/steam_key.pem ec2-user@3.1
 
 `dotenv` loads `.env` from `WorkingDirectory`, so no secrets live in the unit file.
 
+## Code sync via GitHub
+
+Deploys go through GitHub: push from the Mac, pull on the server. This replaced an
+earlier rsync-based flow. Big advantage: `git pull` **never touches untracked
+files**, so it can't clobber the server's `.env` or `jobs.sqlite` (live reminders).
+
+### Security ground rules
+- **`.env` is never committed.** It's gitignored. Verify it isn't in history:
+  `git ls-files | grep '\.env$'` and `git log --all --oneline -- .env` should both
+  print nothing. If `.env` was ever committed, its tokens are exposed — regenerate
+  the Discord + Notion tokens immediately.
+- The server authenticates to GitHub with a **fine-grained PAT** (read-only
+  "Contents", this repo only, with an expiry). Stored via git's credential helper at
+  `~/.git-credentials` (plaintext, perms 600) — acceptable on a private box; rotate
+  the token if the box is ever exposed.
+
+### One-time server setup
+```bash
+cd ~/DiscordBot
+git remote -v                        # confirm origin = the GitHub repo (https://...)
+git config credential.helper store   # save the PAT after first use
+git fetch origin
+git reset --hard origin/main         # align tracked files; untracked .env/venv/jobs.sqlite untouched
+chmod +x deploy.sh                   # make the deploy script executable (once)
+```
+On first `git fetch`, enter your GitHub **username** + the **PAT** as the password.
+
 ## Day-to-day operations
 
 | Goal | Command |
@@ -104,14 +127,22 @@ ssh -i /Users/porridge/Desktop/Jobs/TGC/steam_scraper/steam_key.pem ec2-user@3.1
 | Disk | `df -h /` |
 
 ### Pushing a code change
-1. On your Mac, re-run the **rsync** from step 3 (it only sends changed files).
-2. SSH in. If `requirements.txt` changed:
-   `cd ~/DiscordBot && source venv/bin/activate && pip install -r requirements.txt`.
-3. `sudo systemctl restart qlpbot`.
-4. `journalctl -u qlpbot -n 20 --no-pager` to confirm a clean restart.
+1. **Mac** — commit + push:
+   ```bash
+   git add -A && git commit -m "..." && git push origin main
+   ```
+2. **EC2** — one command:
+   ```bash
+   cd ~/DiscordBot && ./deploy.sh
+   ```
+   `deploy.sh` runs `git pull` → `pip install -r requirements.txt` → restart →
+   prints recent logs. Or do it by hand:
+   `git pull && source venv/bin/activate && pip install -r requirements.txt && sudo systemctl restart qlpbot`.
 
 Remember: any new or changed **slash command** only registers on (re)start — the
-restart in step 3 covers it.
+restart in `deploy.sh` covers it.
+
+> Don't mix rsync and git — git is the deploy path now.
 
 ## Things to watch
 

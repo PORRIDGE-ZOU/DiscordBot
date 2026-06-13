@@ -6,9 +6,14 @@ modules alongside `notion_api.py`, not by bloating `bot.py`.
 ## Files
 ```
 bot.py            # Discord wiring ONLY: intents, command registration, the slash
-                  #   command handlers, bot.run(). Talks to Notion via notion_api.
-notion_api.py     # All Notion calls. Sync SDK; callers use asyncio.to_thread.
-requirements.txt  # py-cord, python-dotenv, notion-client
+                  #   command handlers, bot.run(). Talks to Notion via notion_api,
+                  #   bot state via store, reminders via scheduler.
+notion_api.py     # All Notion calls (READ-ONLY). Sync SDK; callers use to_thread.
+scheduler.py      # APScheduler: channel reminders + per-task DM reminders. SQLite
+                  #   jobstore (jobs.sqlite) -> survives restart.
+store.py          # Local bot state: Discord<->Notion associations + current sprint.
+                  #   stdlib sqlite3 (botstate.db). NOT in Notion.
+requirements.txt  # py-cord, python-dotenv, notion-client, apscheduler, SQLAlchemy
 .env / .env.example  # secrets by name; real values only in .env (gitignored)
 README.md         # human setup + run + command reference
 docs/             # human-facing explanation (summary / deep-dives / bugs / explainers)
@@ -37,9 +42,19 @@ claude/           # Claude's workspace (tasks, notes, decisions, memory)
 ## Current commands
 - `/ping` — liveness.
 - `/notion_check` — list everything the connection can see (ephemeral).
-- `/tasks status:<Done|In progress|Not started|Pivoted|Active>` — status-filtered
-  task list (public). "Active" = In progress + Not started.
+- `/intro` (public), `/help` (ephemeral, auto-generated).
+- Channel reminders: `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel`.
+- Milestone 4 (built, untested live): `/associate` (link Notion email <-> Discord
+  member), `/tasks` + `/taskdetail #` (personal, ephemeral), `/setsprint` + `/sprint`,
+  `/sprinttasks [dept]` (public), `/remind x` (per-task DMs before due).
+
+## Milestone 4 shape
+- Personal-task commands share ONE loader (`_load_personal_tasks`) + ONE sort
+  (`_personal_sorted`: due asc, no-due last, name) so task numbers line up across
+  /tasks, /taskdetail, /remind.
+- query_tasks(assignee_id, sprint, department) builds a type-aware AND filter using
+  the cached data-source schema (data_sources.retrieve). Server-side filtering.
+- Bindings + sprint in store.py SQLite; Notion untouched (read-only).
 
 ## Not built yet
-Scheduled messaging · meeting recording · transcription · Notion page reading ·
-"my tasks" (needs Discord-user -> Notion-assignee mapping).
+Meeting recording · transcription · Notion page reading.

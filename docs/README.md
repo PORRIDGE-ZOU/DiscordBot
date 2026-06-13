@@ -27,8 +27,10 @@ Each entry below says *why future-you would open it*.
 
 ## Deep dives (how a feature actually works)
 - **[deep-dives/notion-task-queries.md](deep-dives/notion-task-queries.md)** — the
-  `/tasks` command end to end, and how to extend it ("my tasks", date filters). Open
-  before changing task querying.
+  sprint + personal task commands end to end (`/associate`, `/tasks`, `/taskdetail`,
+  `/setsprint`, `/sprint`, `/sprinttasks`, `/remind`): the Discord↔Notion association,
+  the sprint filter, the shared numbering, and the per-task reminders. Open before
+  changing task querying.
 
 ## Bugs (post-mortems)
 - **[bugs/2026-05-30-databases-query-removed.md](bugs/2026-05-30-databases-query-removed.md)** —

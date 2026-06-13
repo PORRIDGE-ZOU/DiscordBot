@@ -9,7 +9,9 @@ A custom Discord bot for the QLP (USC Games AGP) team's game-dev workflow.
 4. Notion reading — read any page from the team workspace.
 5. Notion task queries — "what are the ongoing tasks?", "what are *my* tasks?"
 
-**Current status:** Milestone 1 — bot comes online and answers `/ping`.
+**Current status:** online 24/7 on EC2. Working: liveness, Notion connectivity,
+sprint + personal task queries, and reminders. Recording/transcription are still
+planned.
 
 ---
 
@@ -45,6 +47,9 @@ comments in `.env.example` for how to get it.
 3. **Share pages with it** (required — the connection sees nothing otherwise): open
    the team's top page (and the task database) → `•••` → **Connections** → add the
    connection. Sharing a page cascades to its child pages.
+4. **Enable "Read user information"** on the connection (Configuration → Capabilities).
+   `/associate` needs it to look up workspace members by email. Without it, that
+   command can't validate emails.
 
 ### 4. Install dependencies
 ```bash
@@ -73,8 +78,23 @@ hosting (a small VPS or Pi) comes later.
 
 ## Commands
 
-| Command | What it does |
-|---------|--------------|
-| `/ping` | Replies `pong! 🏓`. Confirms the bot is alive. |
-| `/notion_check` | Lists the Notion pages/databases the connection can see (ephemeral). Confirms the Notion link works. |
-| `/tasks status:<choice>` | Lists tasks from the Notion task DB filtered by status: Done, In progress, Not started, Pivoted, or **Active** (In progress + Not started). Public. Needs `NOTION_TASKS_DB_ID`. |
+Visibility: **public** = the whole channel sees it; **private** = only the invoker
+("Only you can see this").
+
+| Command | What it does | Visibility |
+|---------|--------------|------------|
+| `/ping` | Replies `pong! 🏓`. Confirms the bot is alive. | public |
+| `/notion_check` | Lists the Notion pages/databases the connection can see. Confirms the Notion link works. | private |
+| `/intro` | Posts a short blurb of what the bot can do. | public |
+| `/help` | Lists every command and its description (auto-generated). | private |
+| `/associate email:<…> member:<@user>` | Links a Notion account (by email) to a Discord member, so that member's `/tasks` shows their tasks. 1:1 — re-running re-binds. Anyone can run it. | private |
+| `/tasks` | Your own tasks in the current sprint, numbered. Needs you to be `/associate`d and a sprint to be set. | private |
+| `/taskdetail number:<n>` | Full details of one of your tasks, by its number from `/tasks`. | private |
+| `/setsprint x:<n>` | Sets the team's current sprint (e.g. `2` → filters for `Sprint2`). Anyone can run it. | private |
+| `/sprint` | Reports the current sprint number. | public |
+| `/sprinttasks [department:<name>]` | All tasks in the current sprint, grouped by department — or just one department if given. | public |
+| `/remind x:<days>` | DMs you `x` days before **each** of your current-sprint tasks is due. Re-running replaces your previous batch. | private |
+| `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel` | Channel reminders: one-shot, weekly (California time), list, cancel. | private |
+
+The Notion-backed commands need `NOTION_TASKS_DB_ID` set. Associations and the
+current sprint are stored locally in `botstate.db` (gitignored, like `jobs.sqlite`).

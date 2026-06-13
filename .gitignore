@@ -17,4 +17,8 @@ transcripts/
 # overwrite the server's copy (that would wipe scheduled reminders).
 jobs.sqlite
 
+# Local bot state — Discord<->Notion associations + the active sprint. Live server
+# state, same rules as jobs.sqlite: never commit, never deploy over it.
+botstate.db
+
 .DS_Store

@@ -2,7 +2,10 @@
 
 **Date**: 2026-05-30
 **Decided by**: Claude recommendation, accepted by George
-**Status**: Active
+**Status**: Superseded (engine) by 2026-05-30-meeting-bot-and-engine.md — switched
+faster-whisper -> mlx-whisper for the M4 Mac (same large-v3 model + quality; better
+speed on Apple Silicon). The "local large-v3, quality over speed, decoupled" intent
+still holds.
 
 ## Context
 The bot must transcribe team meetings with faithful, dynamic English/Chinese

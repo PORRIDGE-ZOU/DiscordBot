@@ -32,7 +32,8 @@
 ## 2026-05-30 — Session 1 (cont.) — Milestone 1 + 2 shipped
 
 **Done**
-- Milestone 1: `/ping` live in server (bot = "Aboyeur"). Confirmed working.
+- Milestone 1: `/ping` live in server (bot = "Sous Chef", originally "Aboyeur").
+  Confirmed working.
 - Milestone 2 (Notion): connection created + page/DB shared. `/notion_check`
   (search, ephemeral) working — sees 5 items incl. "Test Tasks Tracker".
 - `/tasks status:<choice>` built: single dropdown (Done/In progress/Not started/
@@ -58,7 +59,7 @@
 **Done**
 - Bot now hosted 24/7 on existing AWS EC2 (Amazon Linux 2023, t3.micro, us-east-2,
   IP 3.151.10.101, user ec2-user, python3.11). Confirmed online + /ping works with
-  laptop SSH closed. Bot = Aboyeur#6219 (id 1510367962115215430).
+  laptop SSH closed. Bot = Sous Chef (originally Aboyeur#6219, id 1510367962115215430).
 - systemd service `qlpbot` (Restart=always, enable --now). 2 GB swap added (was 0).
   Coexists with the Steam scraper job on the box.
 - Deploy loop: rsync from Mac (exclude venv/.env/.git/__pycache__/.DS_Store) ->

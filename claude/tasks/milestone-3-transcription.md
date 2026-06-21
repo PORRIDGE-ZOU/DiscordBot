@@ -24,7 +24,7 @@ transcription (save audio first, always).
 Both recording AND transcription want to live on the beefy machine, and that machine
 is online during meetings anyway (George runs them). So:
 
-- **Ops bot (existing, Aboyeur on EC2)** — unchanged: text, Notion, reminders. 24/7.
+- **Ops bot (existing, Sous Chef on EC2)** — unchanged: text, Notion, reminders. 24/7.
 - **Meeting bot (NEW, separate Discord app + token, runs on the M4 Mac)** — joins
   voice, records, saves audio, transcribes locally, posts the transcript. Online only
   during meetings (George starts it; meetings are scheduled).

@@ -18,7 +18,7 @@ Planning features 2+3 (recording + transcription). Constraints that shaped it:
 1. **Dedicated meeting bot** — a SEPARATE Discord app + token, **one portable Python
    codebase** that runs on whichever laptop George has that day (Mac or Windows).
    Online only during meetings. Records + (async) transcribes locally. The existing
-   ops bot (Aboyeur on EC2) stays 24/7 for text/Notion/reminders.
+   ops bot (Sous Chef on EC2) stays 24/7 for text/Notion/reminders.
 2. **Transcription is async/decoupled** — /record stop saves per-user audio +
    metadata (guaranteed), returns instantly; a separate pass transcribes later,
    retry-safe, never endangering the recording. Record + transcribe co-located on

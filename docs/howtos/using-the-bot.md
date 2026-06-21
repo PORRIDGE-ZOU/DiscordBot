@@ -4,7 +4,7 @@ This is for anyone on the QLP Discord server who wants to *use* the bot. No codi
 needed. (If you're working on the bot's code instead, start with
 `../summary/overview.md`.)
 
-The bot appears in the server as **Aboyeur**. You talk to it with **slash commands**
+The bot appears in the server as **Sous Chef**. You talk to it with **slash commands**
 — messages that start with `/`.
 
 ## How slash commands work
@@ -96,7 +96,7 @@ the page in Notion.
 1. Open the page (or database) in Notion.
 2. Click the **`•••`** menu in the top-right corner.
 3. Choose **Connections** (you may need to scroll down the menu).
-4. Find and add the bot's connection — it's named **Aboyeur** *(confirm the exact
+4. Find and add the bot's connection — it's named **Sous Chef** *(confirm the exact
    name with George if you don't see it)*.
 5. Done. Sharing a page also shares everything nested **inside** it, so sharing a
    top-level page covers its sub-pages.

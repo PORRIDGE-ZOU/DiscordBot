@@ -425,7 +425,7 @@ def _reminder_datetime(due, x):
 
 # --- Intro + help -----------------------------------------------------------
 INTRO_TEXT = (
-    "👋 I'm the bot for QLP. I can:\n"
+    "👋 I'm **Sous Chef**, the bot for QLP. I can:\n"
     "• 🔗 Link your Notion account — `/associate`\n"
     "• 📋 Show your sprint tasks — `/tasks`, `/taskdetail`\n"
     "• 🗂️ Show the whole sprint — `/sprinttasks` (optionally by department)\n"

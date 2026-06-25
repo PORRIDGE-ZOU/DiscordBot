@@ -579,6 +579,45 @@ async def reminder_cancel(
     await ctx.respond(f"Cancelled reminder `{id}`.", ephemeral=True)
 
 
+@bot.slash_command(
+    name="dm",
+    description="Send a direct message (to yourself by default), then confirm it was sent.",
+    guild_ids=GUILD_IDS,
+)
+async def dm(
+    ctx: discord.ApplicationContext,
+    message: discord.Option(str, description="The message to send"),
+    member: discord.Option(
+        discord.Member,
+        description="Who to DM (leave blank to DM yourself)",
+        required=False,
+        default=None,
+    ),
+):
+    """DM `message` to `member` (or to the invoker if none given), then reply with a
+    private confirmation. The confirmation is the point: the sender always learns
+    whether the DM went through.
+
+    A bot can only DM a user who shares the server AND allows DMs from server members
+    — if they don't, Discord raises discord.Forbidden, which we surface instead of
+    failing silently."""
+    await ctx.defer(ephemeral=True)
+    target = member or ctx.author
+    try:
+        await target.send(message)
+    except discord.Forbidden:
+        await ctx.respond(
+            f"❌ Couldn't DM {target.mention} — their DMs are closed "
+            "(they'd need to allow direct messages from server members).",
+            ephemeral=True,
+        )
+        return
+    except discord.HTTPException as e:
+        await ctx.respond(f"❌ Failed to send the DM: `{e}`", ephemeral=True)
+        return
+    await ctx.respond(f"✅ DM sent to {target.mention}.", ephemeral=True)
+
+
 # bot.run() opens the gateway connection and BLOCKS forever — the bot is a
 # long-lived process, not a script that finishes. Closing this process (or the
 # laptop) takes the bot offline.

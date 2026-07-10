@@ -92,13 +92,55 @@ def list_workspace_users():
     return users
 
 
-def find_user_by_email(email):
-    """Return {"id","name","email"} for the workspace person with this email
-    (case-insensitive), or None if no one matches."""
-    target = email.strip().lower()
-    for u in list_workspace_users():
-        if u["email"] and u["email"].lower() == target:
-            return u
+def list_task_assignees():
+    """Distinct people who appear as an Assignee on any task, as
+    [{"id","name","email"}, ...].
+
+    Crucial for a team on guest accounts: Notion's `users.list` returns workspace
+    MEMBERS only — guests never show up there, even though they're assigned tasks.
+    Guests DO appear in the Assignee (people) property, so we harvest identities
+    straight from the task rows. `email` may be "" if Notion doesn't expose it for
+    that user (common for guests); match by name in that case.
+    """
+    client = _get_client()
+    ds_id = _get_tasks_data_source_id()
+    seen = {}
+    cursor = None
+    while True:
+        kwargs = {"start_cursor": cursor} if cursor else {}
+        resp = client.data_sources.query(ds_id, **kwargs)
+        for page in resp["results"]:
+            prop = page.get("properties", {}).get(PROP_ASSIGNEE)
+            if not prop:
+                continue
+            for person in prop.get("people", []):
+                uid = person.get("id")
+                if not uid or uid in seen:
+                    continue
+                email = (person.get("person") or {}).get("email") or ""
+                seen[uid] = {"id": uid, "name": person.get("name", ""), "email": email}
+        if not resp.get("has_more"):
+            break
+        cursor = resp.get("next_cursor")
+    return list(seen.values())
+
+
+def find_notion_person(identifier):
+    """Resolve a person by email OR display name (case-insensitive), searching both
+    workspace members AND task assignees (so guests are found). Returns
+    {"id","name","email"} or None.
+
+    `identifier` is whatever the user typed in /associate — an email or a name.
+    """
+    target = identifier.strip().lower()
+    # Members first (authoritative names/emails), then guests via task assignees.
+    candidates = list_workspace_users() + list_task_assignees()
+    for c in candidates:
+        if c.get("email") and c["email"].lower() == target:
+            return c
+    for c in candidates:
+        if c.get("name") and c["name"].lower() == target:
+            return c
     return None
 
 

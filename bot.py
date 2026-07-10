@@ -160,37 +160,48 @@ async def _load_personal_tasks(ctx):
 )
 async def associate(
     ctx: discord.ApplicationContext,
-    email: discord.Option(str, description="The person's Notion account email"),
+    person: discord.Option(
+        str,
+        name="person",
+        description="Notion email OR display name (as shown in the Assignee column)",
+    ),
     member: discord.Option(discord.Member, description="The Discord member to link"),
 ):
-    """Bind a Notion email <-> a Discord member. The member is a user-PICKER, so
-    Discord guarantees it's a real server member (and hands us the stable user ID).
-    The email is validated against the Notion workspace before binding."""
+    """Bind a Notion person <-> a Discord member. `member` is a user-PICKER (real
+    server member + stable ID). `person` is matched by email or display name against
+    workspace members AND task assignees — so GUESTS (who never appear in Notion's
+    members list, but are still assigned tasks) can be linked too."""
     await ctx.defer(ephemeral=True)
     try:
-        user = await asyncio.to_thread(notion_api.find_user_by_email, email)
+        found = await asyncio.to_thread(notion_api.find_notion_person, person)
     except Exception as e:
         await ctx.respond(f"Notion error: `{e}`", ephemeral=True)
         return
-    if not user:
+    if not found:
         await ctx.respond(
-            f"`{email}` isn't a member of the Notion workspace. Nothing changed.",
+            f"Couldn't find **{person}** in Notion — not a workspace member, and not "
+            "assigned to any task. Check the email, or try the display name exactly as "
+            "it appears in the Assignee column. Nothing changed.",
             ephemeral=True,
         )
         return
 
+    # Key the 1:1 binding on the email when Notion exposes it, else the display name
+    # (guests often have no email available through the API).
+    key = found["email"] or found["name"]
     result = await asyncio.to_thread(
-        store.set_association, member.id, user["id"], user["name"], email
+        store.set_association, member.id, found["id"], found["name"], key
     )
     prev_d = result["prev_by_discord"]
     prev_e = result["prev_by_email"]
     notes = []
-    if prev_d and prev_d["email"].lower() != email.lower():
+    if prev_d and prev_d["email"].lower() != key.lower():
         notes.append(f"{member.mention} was linked to `{prev_d['email']}`")
     if prev_e and prev_e["discord_id"] != member.id:
-        notes.append(f"`{email}` was linked to <@{prev_e['discord_id']}>")
+        notes.append(f"`{key}` was linked to <@{prev_e['discord_id']}>")
 
-    bind = f"{member.mention} ↔ **{user['name']}** (`{email}`)"
+    shown = f"`{found['email']}`" if found["email"] else "no email on file"
+    bind = f"{member.mention} ↔ **{found['name']}** ({shown})"
     if notes:
         await ctx.respond(
             "⚠️ This was already bound! " + "; ".join(notes) + f". Now re-bound: {bind}.",

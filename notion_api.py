@@ -200,7 +200,10 @@ def query_tasks(assignee_id=None, sprint=None, department=None):
     clauses = []
     if assignee_id:
         clauses.append({"property": PROP_ASSIGNEE, "people": {"contains": assignee_id}})
-    if sprint is not None:
+    # Sprint filter is OPTIONAL: applied only when a sprint is set AND the DB
+    # actually has a Sprint column. On a DB without sprints we silently return all
+    # sprints rather than erroring, so the task commands still work.
+    if sprint is not None and PROP_SPRINT in _get_schema():
         clauses.append(_eq_filter(PROP_SPRINT, f"Sprint{sprint}"))
     if department:
         clauses.append(_eq_filter(PROP_DEPARTMENT, department))

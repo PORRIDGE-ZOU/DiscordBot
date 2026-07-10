@@ -131,9 +131,10 @@ def _personal_sorted(tasks):
 
 async def _load_personal_tasks(ctx):
     """Shared loader for the personal-task commands. Resolves the caller's Notion
-    person + the current sprint, queries their tasks, returns them sorted. If the
-    caller isn't linked or no sprint is set, it sends the right error (ephemeral)
-    and returns None — the caller just checks for None and stops.
+    person, queries their tasks (scoped to the current sprint if one is set), and
+    returns them sorted. If the caller isn't linked, or the Notion query fails, it
+    sends the right error (ephemeral) and returns None — the caller checks for None
+    and stops. The sprint is OPTIONAL: when unset, all sprints are returned.
 
     Assumes ctx.defer(ephemeral=True) was already called.
     """
@@ -141,13 +142,14 @@ async def _load_personal_tasks(ctx):
     if not assoc:
         await ctx.respond("You're not linked yet — run `/associate` first.", ephemeral=True)
         return None
-    sprint = await asyncio.to_thread(store.get_current_sprint)
-    if sprint is None:
-        await ctx.respond("No sprint set yet — run `/setsprint`.", ephemeral=True)
+    sprint = await asyncio.to_thread(store.get_current_sprint)  # may be None (optional)
+    try:
+        tasks = await asyncio.to_thread(
+            notion_api.query_tasks, assoc["notion_user_id"], sprint, None
+        )
+    except Exception as e:
+        await ctx.respond(f"Notion error: `{e}`", ephemeral=True)
         return None
-    tasks = await asyncio.to_thread(
-        notion_api.query_tasks, assoc["notion_user_id"], sprint, None
-    )
     return assoc, sprint, _personal_sorted(tasks)
 
 
@@ -210,8 +212,9 @@ async def tasks(ctx: discord.ApplicationContext):
     if loaded is None:
         return
     _assoc, sprint, items = loaded
+    scope = f"Sprint {sprint}" if sprint is not None else "all sprints"
     if not items:
-        await ctx.respond(f"No tasks assigned to you in **Sprint {sprint}**.", ephemeral=True)
+        await ctx.respond(f"No tasks assigned to you ({scope}).", ephemeral=True)
         return
     lines = []
     for i, t in enumerate(items, 1):
@@ -221,7 +224,7 @@ async def tasks(ctx: discord.ApplicationContext):
         if t["description"]:
             parts.append(_truncate(t["description"], 80))
         lines.append(f"{i}. " + " — ".join(parts))
-    body = f"**Your tasks — Sprint {sprint}** ({len(items)}):\n" + "\n".join(lines)
+    body = f"**Your tasks — {scope}** ({len(items)}):\n" + "\n".join(lines)
     await ctx.respond(_truncate(body, 1990), ephemeral=True)
 
 
@@ -240,10 +243,10 @@ async def taskdetail(
     loaded = await _load_personal_tasks(ctx)
     if loaded is None:
         return
-    _assoc, sprint, items = loaded
+    _assoc, _sprint, items = loaded
     if number < 1 or number > len(items):
         await ctx.respond(
-            f"No task #{number}. You have {len(items)} task(s) in Sprint {sprint} — run `/tasks`.",
+            f"No task #{number}. You have {len(items)} task(s) — run `/tasks`.",
             ephemeral=True,
         )
         return
@@ -310,10 +313,8 @@ async def sprinttasks(
     department order; with a department -> just that one (validated against the
     Notion Department options)."""
     await ctx.defer()
-    sprint_num = await asyncio.to_thread(store.get_current_sprint)
-    if sprint_num is None:
-        await ctx.respond("No sprint set yet — run `/setsprint`.")
-        return
+    sprint_num = await asyncio.to_thread(store.get_current_sprint)  # may be None (optional)
+    scope = f"Sprint {sprint_num}" if sprint_num is not None else "All tasks"
 
     if department:
         try:
@@ -339,7 +340,7 @@ async def sprinttasks(
         return
     if not items:
         where = f" in **{department}**" if department else ""
-        await ctx.respond(f"No tasks{where} in **Sprint {sprint_num}**.")
+        await ctx.respond(f"No tasks{where} ({scope}).")
         return
 
     if department:
@@ -348,7 +349,7 @@ async def sprinttasks(
             f"{i}. **{t['name']}** — {t['status'] or '—'} — 👤 {t['assignee'] or '—'}"
             for i, t in enumerate(items, 1)
         ]
-        header = f"**Sprint {sprint_num} — {department}** ({len(items)}):"
+        header = f"**{scope} — {department}** ({len(items)}):"
     else:
         rank = {d: i for i, d in enumerate(notion_api.DEPARTMENT_ORDER)}
         items.sort(key=lambda t: (rank.get(t["department"], len(rank)), t["name"].lower()))
@@ -356,7 +357,7 @@ async def sprinttasks(
             f"{i}. **{t['name']}** — {t['status'] or '—'} — 👤 {t['assignee'] or '—'} — 🏷️ {t['department'] or '—'}"
             for i, t in enumerate(items, 1)
         ]
-        header = f"**Sprint {sprint_num} — all tasks** ({len(items)}):"
+        header = f"**{scope}** ({len(items)}):"
 
     await ctx.respond(_truncate(header + "\n" + "\n".join(lines), 1990))
 

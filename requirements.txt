@@ -14,3 +14,7 @@ notion-client>=2.2
 # survive bot restarts.
 apscheduler>=3.10,<4
 SQLAlchemy>=2.0
+
+# OpenAI SDK — parses the natural-language #time-off posts into dated entries.
+# Synchronous client; call it off the event loop with asyncio.to_thread.
+openai>=1.40

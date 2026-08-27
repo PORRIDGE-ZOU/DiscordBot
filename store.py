@@ -1,8 +1,10 @@
 """Local bot-state store (SQLite).
 
 Holds state the bot OWNS and that does NOT live in Notion:
-  - associations: Discord user <-> Notion person (drives /tasks, /taskdetail, /remind)
-  - config:       misc key/value — currently the active sprint number
+  - associations:  Discord user <-> Notion person (drives /tasks, /taskdetail, /remind)
+  - config:        misc key/value — currently the active sprint label
+  - timeoff_cache: the parsed form of each #time-off message, so we never pay to
+                   parse the same message twice (drives /time-off-recently)
 
 Why local, not Notion: the Notion integration is read-only by design (it only ever
 READS the team's workspace). Bot state is small, bot-owned, and changes through
@@ -49,6 +51,21 @@ def init():
         )
         conn.execute(
             "CREATE TABLE IF NOT EXISTS config (key TEXT PRIMARY KEY, value TEXT)"
+        )
+        # One row per #time-off message we've already sent to the language model.
+        # content_hash lets us notice an EDITED message and re-parse just that one.
+        conn.execute(
+            """
+            CREATE TABLE IF NOT EXISTS timeoff_cache (
+                message_id   TEXT PRIMARY KEY,
+                author_id    INTEGER,
+                author_name  TEXT,
+                posted_at    TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                parsed_json  TEXT NOT NULL,
+                parsed_at    TEXT NOT NULL
+            )
+            """
         )
 
 
@@ -142,3 +159,46 @@ def get_current_sprint():
 
 def set_current_sprint(label):
     set_config("current_sprint", str(label))
+
+
+# --- Time-off parse cache ----------------------------------------------------
+# Parsing a message costs an API call, so we do it exactly once. The cache is
+# keyed by Discord message id and guarded by a hash of the message text: an edited
+# message changes its hash and gets re-parsed; everything else is a free lookup.
+
+def get_timeoff_cached(message_id, content_hash):
+    """Parsed JSON for this message IF we've parsed this exact text before."""
+    with _conn() as conn:
+        row = conn.execute(
+            "SELECT parsed_json FROM timeoff_cache WHERE message_id = ? AND content_hash = ?",
+            (str(message_id), content_hash),
+        ).fetchone()
+    return row["parsed_json"] if row else None
+
+
+def set_timeoff_cached(message_id, author_id, author_name, posted_at, content_hash, parsed_json):
+    """Store (or replace) the parse for one message."""
+    with _conn() as conn:
+        conn.execute(
+            """
+            INSERT INTO timeoff_cache
+                (message_id, author_id, author_name, posted_at, content_hash,
+                 parsed_json, parsed_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(message_id) DO UPDATE SET
+                author_name  = excluded.author_name,
+                posted_at    = excluded.posted_at,
+                content_hash = excluded.content_hash,
+                parsed_json  = excluded.parsed_json,
+                parsed_at    = excluded.parsed_at
+            """,
+            (
+                str(message_id),
+                author_id,
+                author_name,
+                posted_at,
+                content_hash,
+                parsed_json,
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )

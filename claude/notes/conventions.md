@@ -50,6 +50,18 @@ Applies to sqlite (store.py) too — it's blocking; wrap in to_thread.
 - Relations hold PAGE IDS. Index the related data source ONCE in both directions
   (`_relation_index`) — never one lookup per row.
 
+## External services (Notion, OpenAI)
+- One module per external service; it owns every call to that service and imports
+  NOTHING from discord. bot.py converts Discord objects -> plain dicts first.
+- Sync SDKs -> callers wrap in asyncio.to_thread. Same as the Notion layer.
+- Anything billed per call gets a persistent cache keyed by a stable id + a hash of
+  the input (store.timeoff_cache), so the same input is never paid for twice.
+- Model output is normalised + validated in code before use (timeoff._clean_entry):
+  a malformed date is DROPPED, never rendered. A confidently-wrong calendar row is
+  worse than a missing one.
+- Timezone-sensitive features name their zone explicitly (timeoff.LA,
+  scheduler.CALIFORNIA). Never rely on the server's local time.
+
 ## Discord landmines baked into the code
 - Intents in code MUST match the portal toggles or events arrive empty.
 - ctx.respond() within ~3s of invocation, else interaction fails. Slow work ->

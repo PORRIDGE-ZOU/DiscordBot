@@ -7,7 +7,7 @@ slash command -> response) before any feature is added.
 
 import asyncio
 import os
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import discord
 from dotenv import load_dotenv
@@ -15,6 +15,7 @@ from dotenv import load_dotenv
 import notion_api
 import scheduler
 import store
+import timeoff
 
 # Load DISCORD_TOKEN (and optional DISCORD_GUILD_ID) from the .env file into the
 # process environment. Must run before we read them below.
@@ -48,7 +49,8 @@ GUILD_IDS = [int(GUILD_ID)] if GUILD_ID else None
 async def on_ready():
     """Fires once after login + the gateway connection is established."""
     print(f"Logged in as {bot.user} (id: {bot.user.id})")
-    # Create the local bot-state tables (associations + sprint config) if missing.
+    # Create the local bot-state tables (associations, sprint config, time-off
+    # parse cache) if missing.
     store.init()
     # Start the reminder scheduler now that the event loop is running and the bot
     # is ready. This also reloads any reminders saved before the last restart.
@@ -690,6 +692,179 @@ async def dm(
         await ctx.respond(f"❌ Failed to send the DM: `{e}`", ephemeral=True)
         return
     await ctx.respond(f"✅ DM sent to {target.mention}.", ephemeral=True)
+
+
+# --- Time off ----------------------------------------------------------------
+# The #time-off channel is written in plain English ("driving to LA Aug 9th to
+# 19th", "can't make the engineering meeting tmr"). timeoff.py turns those posts
+# into dated entries; these two commands just pick a window and render it.
+# Everything is Los Angeles time — see timeoff.py for why that matters.
+
+
+async def _fetch_timeoff_messages():
+    """Read the recent history of the #time-off channel.
+
+    Returns (messages, error). `messages` are plain dicts — timeoff.py never
+    touches Discord objects, the same way notion_api.py never touches them.
+
+    Reading another channel's history needs two things Discord keeps separate: the
+    Message Content intent (enabled at startup) and the Read Message History
+    permission on that specific channel. Missing either yields empty content or a
+    Forbidden, so both are reported rather than silently returning nothing.
+    """
+    cid = timeoff.channel_id()
+    if not cid:
+        return None, (
+            "`TIMEOFF_CHANNEL_ID` isn't set in the bot's `.env`, so I don't know "
+            "which channel to read."
+        )
+    channel = bot.get_channel(cid)
+    if channel is None:
+        try:
+            channel = await bot.fetch_channel(cid)
+        except discord.NotFound:
+            return None, f"No channel with id `{cid}` — check `TIMEOFF_CHANNEL_ID`."
+        except discord.Forbidden:
+            return None, f"I can't see channel `{cid}`. I need access to it."
+        except discord.HTTPException as e:
+            return None, f"Couldn't open channel `{cid}`: `{e}`"
+
+    after = datetime.now(timezone.utc) - timedelta(days=timeoff.HISTORY_DAYS)
+    messages = []
+    try:
+        async for msg in channel.history(limit=None, after=after, oldest_first=True):
+            if msg.author.bot or not msg.content.strip():
+                continue
+            messages.append(
+                {
+                    "id": msg.id,
+                    "author_id": msg.author.id,
+                    # display_name = server nickname if set, else username — the name
+                    # teammates actually recognise.
+                    "author_name": msg.author.display_name,
+                    "posted_at": msg.created_at,  # tz-aware UTC
+                    "text": msg.content,
+                    "jump_url": msg.jump_url,
+                }
+            )
+    except discord.Forbidden:
+        return None, (
+            f"I can't read history in {channel.mention} — I need the **Read Message "
+            "History** permission there."
+        )
+    return messages, None
+
+
+async def _load_timeoff_entries(ctx):
+    """Fetch + parse, reporting any failure ephemerally. None means stop."""
+    messages, error = await _fetch_timeoff_messages()
+    if error:
+        await ctx.respond(f"⚠️ {error}", ephemeral=True)
+        return None
+    if not messages:
+        await ctx.respond(
+            f"No messages in the last {timeoff.HISTORY_DAYS} days of the time-off "
+            "channel.",
+            ephemeral=True,
+        )
+        return None
+    try:
+        # Blocking: SQLite lookups plus (for anything not cached) an HTTP call.
+        return await asyncio.to_thread(timeoff.load_entries, messages)
+    except KeyError as e:
+        await ctx.respond(
+            f"⚠️ Missing config: `{e.args[0]}` isn't set in the bot's `.env`.",
+            ephemeral=True,
+        )
+        return None
+    except Exception as e:
+        await ctx.respond(f"Couldn't read the time-off channel: `{e}`", ephemeral=True)
+        return None
+
+
+def _timeoff_lines(dated, unscheduled, today):
+    """Render both sections. Dated first — those are the ones with real dates."""
+    lines = []
+    if dated:
+        lines.append("**Scheduled**")
+        for entry in dated:
+            detail = timeoff.describe(entry)
+            line = f"• {timeoff.format_range(entry, today)} — **{entry['author']}**"
+            lines.append(f"{line} — {detail}" if detail else line)
+    if unscheduled:
+        if lines:
+            lines.append("")
+        lines.append("**Unscheduled** (no date given yet)")
+        for entry in unscheduled:
+            posted = entry["posted_at"].strftime("%b %-d, %-I:%M %p")
+            lines.append(
+                f"• **{entry['author']}** said they won't be available for the next "
+                f"**{entry['event']}** — posted {posted}"
+            )
+    return lines
+
+
+@bot.slash_command(
+    name="time-off-recently",
+    description="Who's unavailable over the next 7 days (including today).",
+    guild_ids=GUILD_IDS,
+)
+async def time_off_recently(ctx: discord.ApplicationContext):
+    """The useful one: the next seven days, inclusive of today, in LA time.
+
+    A multi-day absence shows if it overlaps the window at all, not only if it
+    starts inside it. Posts that name an event but no date ("the next work
+    session") appear under Unscheduled for two weeks after they were written."""
+    await ctx.defer(ephemeral=True)
+    entries = await _load_timeoff_entries(ctx)
+    if entries is None:
+        return
+
+    today = timeoff.today_la()
+    start, end = timeoff.week_window(today)
+    dated, unscheduled = timeoff.select(entries, start, end)
+
+    header = (
+        f"**Time off — {timeoff.format_day(start, today)} to "
+        f"{end.strftime('%b %-d')}** (LA time)"
+    )
+    if not dated and not unscheduled:
+        await ctx.respond(f"{header}\n\nNobody has posted time off for this window.",
+                          ephemeral=True)
+        return
+    body = header + "\n\n" + "\n".join(_timeoff_lines(dated, unscheduled, today))
+    await ctx.respond(_truncate(body, 1990), ephemeral=True)
+
+
+@bot.slash_command(
+    name="time-off-this-month",
+    description="Every time-off post landing in the current month, in order.",
+    guild_ids=GUILD_IDS,
+)
+async def time_off_this_month(ctx: discord.ApplicationContext):
+    """The verification view: everything overlapping this LA calendar month, in
+    chronological order, so the parse can be eyeballed against the channel."""
+    await ctx.defer(ephemeral=True)
+    entries = await _load_timeoff_entries(ctx)
+    if entries is None:
+        return
+
+    today = timeoff.today_la()
+    start, end = timeoff.month_window(today)
+    dated, unscheduled = timeoff.select(entries, start, end)
+
+    header = f"**Time off — {start.strftime('%B %Y')}** (LA time)"
+    if not dated and not unscheduled:
+        await ctx.respond(f"{header}\n\nNothing posted for this month.", ephemeral=True)
+        return
+    count = f"{len(dated)} dated"
+    if unscheduled:
+        count += f", {len(unscheduled)} without a date"
+    body = (
+        f"{header} — {count}\n\n"
+        + "\n".join(_timeoff_lines(dated, unscheduled, today))
+    )
+    await ctx.respond(_truncate(body, 1990), ephemeral=True)
 
 
 # bot.run() opens the gateway connection and BLOCKS forever — the bot is a

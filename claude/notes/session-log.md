@@ -297,3 +297,59 @@ py_compile clean.
   whole schema in one shot).
 - Open: /taskdetail could clip at Discord's 2000-char cap on a wide board — offered
   to drop empty columns or paginate; George hasn't picked.
+
+## 2026-08-26 — Session 4 (cont.) — Milestone 6: time-off calendar (BUILT, untested live)
+
+**Ask**: read #time-off💨 (natural language absence posts) -> a calendar.
+`/time-off-recently` = next 7 days INCLUSIVE of today (the useful one);
+`/time-off-this-month` = everything in this month (the verification view).
+America/Los_Angeles is the reference zone. "next engineering meeting"-style posts
+have no derivable date -> live for 2 weeks from posting, rendered "X said won't be
+available for the next <event> — posted <time>".
+
+**Engine: OpenAI, gpt-4o.** I proposed the Claude API (and loaded the claude-api
+skill); George said he has an OpenAI key. His call — built against the OpenAI SDK.
+Flagged that channel messages leave the server for a third party either way, and
+suggested a heads-up post in the server; he chose to proceed.
+
+**Decisions (George)**: author-only attribution (no third-party name matching);
+BOTH commands ephemeral; NO meeting-schedule config (2-week rule as specified);
+no bare /time-off; channel id 1518497839951511572; model gpt-4o.
+
+**Built**
+- NEW timeoff.py — OpenAI parse (strict JSON schema, temperature=0, batches of 20),
+  LA windowing (week_window / month_window / select by RANGE OVERLAP), display
+  helpers. Knows nothing about Discord.
+- store.py — timeoff_cache table + get/set. Keyed by message id, guarded by sha256
+  of the text: an edited message re-parses, everything else is a free lookup. Each
+  message is paid for exactly once.
+- bot.py — _fetch_timeoff_messages (history, 60 days back, bots+empties skipped,
+  Forbidden/NotFound/HTTPException all reported), _load_timeoff_entries,
+  _timeoff_lines, /time-off-recently, /time-off-this-month. Both defer() first.
+- .env.example — OPENAI_API_KEY, OPENAI_MODEL (optional), TIMEOFF_CHANNEL_ID.
+  requirements.txt — openai>=1.40. Local .env got TIMEOFF_CHANNEL_ID.
+
+**Design points worth keeping**
+- The POSTING TIMESTAMP IN LA is passed to the model per message — without it
+  "tmr"/"next thurs" are unresolvable. This is the whole trick.
+- resolved vs unresolved: a named event with no derivable date is a first-class
+  outcome, not a failure. Prompt says explicitly: never invent a date.
+- _clean_entry DROPS malformed dates rather than rendering them. A confidently
+  wrong calendar row is worse than a missing one.
+- 60-day history read vs 7/30-day report window: a July post can describe August.
+
+**Verified offline** (OpenAI SDK stubbed, no key, no network): the four real
+examples through both windows, multi-day overlap-only match, a stale unresolved
+entry correctly excluded from the 7-day view, Dec + leap-Feb month bounds,
+_clean_entry on backwards ranges / missing end / junk dates.
+
+**Untested live** — everything. Nothing has hit the real API or channel yet.
+
+**Next**
+- George: `pip install -r requirements.txt`, put OPENAI_API_KEY (+ TIMEOFF_CHANNEL_ID)
+  in the EC2 .env, restart, then `/time-off-this-month` FIRST to eyeball the parse
+  against the channel before trusting `/time-off-recently`.
+- Then: docs (deep-dive on the time-off pipeline + README/howto command tables),
+  held for approval.
+- Watch: /taskdetail and both time-off commands can clip at Discord's 2000-char cap
+  on a busy month. Pagination offered, not yet chosen.

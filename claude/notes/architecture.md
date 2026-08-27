@@ -11,8 +11,10 @@ bot.py            # Discord wiring ONLY: intents, command registration, the slas
 notion_api.py     # All Notion calls (READ-ONLY). Sync SDK; callers use to_thread.
 scheduler.py      # APScheduler: channel reminders + per-task DM reminders. SQLite
                   #   jobstore (jobs.sqlite) -> survives restart.
-store.py          # Local bot state: Discord<->Notion associations + current sprint.
-                  #   stdlib sqlite3 (botstate.db). NOT in Notion.
+store.py          # Local bot state: Discord<->Notion associations, current sprint,
+                  #   time-off parse cache. stdlib sqlite3 (botstate.db).
+timeoff.py        # #time-off channel -> dated entries. OpenAI (sync SDK, to_thread).
+                  #   Knows nothing about Discord; bot.py hands it plain dicts.
 requirements.txt  # py-cord, python-dotenv, notion-client, apscheduler, SQLAlchemy
 .env / .env.example  # secrets by name; real values only in .env (gitignored)
 README.md         # human setup + run + command reference
@@ -70,6 +72,17 @@ claude/           # Claude's workspace (tasks, notes, decisions, memory)
 - /taskdetail renders task["all"] — every column in the DB, roles first — so new
   Notion columns appear without a code change.
 - Bindings + sprint in store.py SQLite; Notion untouched (read-only).
+
+## Time-off layer (Milestone 6)
+- bot.py reads channel history (TIMEOFF_CHANNEL_ID) -> plain dicts -> timeoff.py.
+  Same split as Notion: the external service lives in its own module.
+- Every message parsed ONCE. store.timeoff_cache keyed by message id, guarded by a
+  sha256 of the text so an EDITED message re-parses and nothing else does.
+- Model gets the message + author + POSTING TIMESTAMP IN LA — without the timestamp
+  "tmr"/"next thurs" can't resolve. Strict JSON schema, temperature=0.
+- Entries are resolved (real dates) or unresolved (named event only). Unresolved
+  show for UNRESOLVED_VALID_DAYS=14 from posting.
+- All windowing in America/Los_Angeles dates. Dated entries match by RANGE OVERLAP.
 
 ## Not built yet
 Meeting recording · transcription · Notion page reading.

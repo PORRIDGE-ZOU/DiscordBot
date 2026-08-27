@@ -24,7 +24,7 @@ one feature at a time and is expected to grow.
 - `/intro`, `/help` — capability blurb (public) and the auto-generated command list.
 - **Sprint + personal tasks:** `/associate` (link a Notion person — by email or
   display name, guests included — to a Discord member), `/tasks` + `/taskdetail`
-  (your own tasks; scoped to the current sprint if one is set), `/setsprint` +
+  (your own tasks; scoped to the current sprint if one is set), `/setsprint label` +
   `/sprint`, `/sprinttasks [department]` (the whole sprint). See
   `../deep-dives/notion-task-queries.md`.
 - **Reminders + DMs:** `/remind` (DM before each of your tasks is due), `/dm` (send a
@@ -38,7 +38,7 @@ The bot is a single long-lived Python process. Source files:
 | File | Responsibility |
 | --- | --- |
 | `bot.py` | **Discord only.** Intents, slash-command registration, the command handlers, `bot.run()`. Talks to Notion via `notion_api`, bot state via `store`, reminders via `scheduler`. |
-| `notion_api.py` | **All Notion calls (read-only).** Search, workspace-user lookup, task queries (data-source resolution + schema-aware filters), and the helpers that turn Notion's JSON into plain values. |
+| `notion_api.py` | **All Notion calls (read-only).** Search, workspace-user lookup, task queries, and the helpers that turn Notion's JSON into plain values. It resolves *which column fills which role* from the database's live schema rather than hardcoding names, so a renamed or retyped Notion column doesn't need a code change — see `../explainers/schema-driven-notion-columns.md`. |
 | `scheduler.py` | **Reminders.** APScheduler with a persistent SQLite jobstore (`jobs.sqlite`) — channel reminders and per-task DM reminders, both surviving restarts. |
 | `store.py` | **Local bot state.** Discord↔Notion associations and the active sprint, in a small SQLite (`botstate.db`). Not in Notion. |
 
@@ -83,5 +83,7 @@ startup, so a new or changed command won't appear until you restart.
 - **Discord platform mechanics** (gateway, intents, slash commands, the 3-second
   rule): `../explainers/discord-bot-basics.md`
 - **Notion integration + data-source model**: `../explainers/notion-integration-model.md`
+- **How the bot survives a renamed/retyped Notion column**:
+  `../explainers/schema-driven-notion-columns.md`
 - **How `/tasks` works end to end**: `../deep-dives/notion-task-queries.md`
 - **Things that broke and why**: `../bugs/`

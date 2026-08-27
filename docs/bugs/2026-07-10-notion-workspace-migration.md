@@ -45,6 +45,20 @@ tasks → they're a guest without an exposed email; use their display name.
   workspace, enable **Read user information**, share the tracker with it.
 - The bot **caches the DB schema per process** — after adding/renaming columns (or
   swapping the DB), **restart** so it re-reads the schema.
-- `Sprint` Select options must be named exactly `Sprint1`, `Sprint2`, … to match the
-  `f"Sprint{n}"` filter.
-- Column names must match the `PROP_*` constants in `notion_api.py`.
+- Share any database a **relation** column points at (e.g. Sprints) with the connection
+  too. Sharing the task DB does not cascade across a relation.
+
+## Update, 2026-08-26 — the last two bullets are obsolete
+
+This post-mortem originally ended with "`Sprint` options must be named exactly
+`Sprint1`, `Sprint2`…" and "column names must match the `PROP_*` constants". The **next**
+workspace move broke both assumptions at once: the column became `Sprints`, its type
+became a **relation**, and its values became `Sprint 1` with a space.
+
+The constants are gone. The bot now resolves each column it needs from the live schema
+(by name alias, then by property type) and builds every filter from the reported type,
+so a rename or retype no longer needs a code change. Sprint labels are matched loosely,
+so `Sprint 1` / `sprint1` / `1` are interchangeable.
+
+See `../explainers/schema-driven-notion-columns.md` for the design, and run
+`/notion_check` to see which column the bot picked for each role.

@@ -25,6 +25,12 @@ or database that was never shared returns empty results or a 404 — not an auth
 error, which makes it easy to misdiagnose. If `/notion_check` comes back with
 fewer items than expected, something isn't shared.
 
+**Sharing does not cascade across a relation.** "Child pages" means pages nested
+*inside* the shared one. A database that the shared one merely **links to** (a
+relation column — our `Sprints`) is a separate top-level thing and needs its own
+`•••` → Connections. This is easy to miss because the task database reads fine;
+only the relation's *contents* are invisible.
+
 ## Reading what's shared: `search`
 
 `/notion_check` calls Notion's `search` with no query, which returns **everything
@@ -68,12 +74,18 @@ Storing the database id (stable, copy-pasteable from the URL) and resolving the 
 source from it keeps configuration simple — you never have to hunt for a data source
 id by hand.
 
-There's a fourth call worth knowing: `data_sources.retrieve(data_source_id)` returns
-the data source's **schema** — every property and its type, and a select column's
-options. The bot fetches this once (cached in `notion_api._schema`) so it can build
-the correct filter shape per property type instead of hardcoding, and so
-`/sprinttasks` can list the valid Department names. See
-`../deep-dives/notion-task-queries.md`.
+There's a fourth call worth knowing, and it turns out to be the most important one:
+`data_sources.retrieve(data_source_id)` returns the data source's **schema** — every
+property with its type, a select column's options, and a relation column's target.
+
+The bot fetches this once (cached in `notion_api._schema`) and drives almost
+everything off it: which column fills each role it needs, the correct filter shape per
+property type, the valid Department and sprint values, and what a relation points at.
+That's what lets the same code work against a task database it has never seen. Full
+treatment: `schema-driven-notion-columns.md`.
+
+> The cache is **per process**. After adding, renaming or retyping a Notion column,
+> **restart the bot** or it keeps using the old schema.
 
 ## Server-side filtering
 
@@ -92,17 +104,38 @@ The bot never downloads the whole table and filters in Python. It sends Notion a
 ```
 
 `"status"` here is the filter type for Notion's **Status** property (distinct from
-a Select property — they filter differently). The property name `"Status"` must
-match the column name in Notion exactly; rename the column and the code constant
-must change with it (the names live as `PROP_*` constants in `notion_api.py`). The
-same is true for `Task name`, `Assignee`, `Due date`, `Sprint`, `Department`, etc.
+a Select property — they filter differently). The property *name* in a filter must
+match the column name in Notion exactly — but the bot doesn't hardcode those names
+any more: it looks up which column fills each role in the live schema first
+(`schema-driven-notion-columns.md`).
 
 Because different property types need different filter shapes, the bot doesn't
-hardcode them: `_eq_filter` looks up each property's type in the cached schema and
-builds the matching clause (a `select` `equals`, a `status` `equals`, a `rich_text`
-`equals`, …). The assignee filter uses the **People** type:
-`{"property": "Assignee", "people": {"contains": <notion user id>}}` — which is why
-`/associate` stores the Notion **user id**, not just the email.
+hardcode those either: `_eq_filter` looks up each property's type in the cached schema
+and builds the matching clause (a `select` `equals`, a `status` `equals`, a `relation`
+`contains`, …). The assignee filter uses the **People** type:
+`{"property": <assignee column>, "people": {"contains": <notion user id>}}` — which is
+why `/associate` stores the Notion **user id**, not just the email.
+
+### Relations filter by page id, not by name
+
+A **relation** property stores links to pages in another database, and its cells hold
+**page ids** — the label you see in the UI is the related page's title, fetched by
+Notion for display. So this does *not* work:
+
+```python
+{"property": "Sprints", "relation": {"equals": "Sprint 1"}}   # ✗ no such filter
+```
+
+You must resolve the label to the page's id first:
+
+```python
+{"property": "Sprints", "relation": {"contains": "2f1a…"}}     # ✓
+```
+
+The bot does that by querying the related data source **once** and caching both
+directions (id → title for display, normalised title → id for filtering). Doing it
+per-task would be an N+1; doing it not at all is why a relation column silently breaks
+a filter written for a Select.
 
 This server-side approach is what makes the task commands fast and lets compound
 queries (assignee = me **and** sprint = current) scale without pulling everything.

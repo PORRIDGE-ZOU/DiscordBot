@@ -22,8 +22,13 @@ Each entry below says *why future-you would open it*.
   intents, slash commands, the 3-second interaction rule, command registration,
   guild vs. global. Open when a command "isn't working" or before adding one.
 - **[explainers/notion-integration-model.md](explainers/notion-integration-model.md)** —
-  connections + the sharing gate, `search`, and the 2025 data-source model. Open
-  before touching anything that reads Notion.
+  connections + the sharing gate, `search`, the 2025 data-source model, and why a
+  relation filters by page id. Open before touching anything that reads Notion.
+- **[explainers/schema-driven-notion-columns.md](explainers/schema-driven-notion-columns.md)** —
+  how the bot reads a task database it has never seen: roles resolved against the live
+  schema instead of hardcoded column names, crucial-vs-optional properties, relation
+  indexing, and the restart rule. Open before changing `notion_api.py`, or when a
+  Notion column gets renamed or retyped.
 
 ## Deep dives (how a feature actually works)
 - **[deep-dives/notion-task-queries.md](deep-dives/notion-task-queries.md)** — the
@@ -39,7 +44,8 @@ Each entry below says *why future-you would open it*.
 - **[bugs/2026-07-10-notion-workspace-migration.md](bugs/2026-07-10-notion-workspace-migration.md)** —
   what broke moving to a new workspace: page-vs-database id, guests not in
   `users.list`, missing `Sprint` column. Open when re-pointing the bot at a new
-  workspace or DB.
+  workspace or DB. The follow-up move (a column renamed *and* retyped) is what drove
+  the schema-driven design in the explainer above.
 
 ---
 

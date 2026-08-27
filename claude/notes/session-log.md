@@ -274,7 +274,26 @@ py_compile clean.
 - New connection + token + DB id in EC2 .env, then restart; wipe botstate.db
   associations (Notion user ids are per-workspace).
 
+**Docs (George approved "go update all docs")**
+- README: command table (/setsprint label, /taskdetail all props, /notion_check
+  schema map) + NEW "What the task database must contain" role table + relation
+  sharing + restart note.
+- deep-dives/notion-task-queries: sprint-as-label + loose matching + relation section;
+  "Roles, not column names" replacing the PROP_* section; type-driven filter table;
+  _task_full/"all" + _prop_value; /sprinttasks dept order from schema; extend notes.
+- explainers/notion-integration-model: sharing does NOT cascade across a relation;
+  schema call promoted to "most important"; relations filter by page id not label.
+- howtos/using-the-bot: /setsprint by name, /taskdetail every column, /notion_check
+  diagnoses the board, NEW "If you change the task board in Notion" section.
+- summary/overview + docs/README index; 2026-07-10 post-mortem's now-obsolete advice
+  marked superseded with an "Update, 2026-08-26" section.
+- NEW explainers/schema-driven-notion-columns.md — the teaching artifact.
+- Link check across docs/: no broken relative links.
+
+**George committed the code as e9d26e0** (docs came after, still uncommitted).
+
 **Next**
 - Live test on the new workspace, starting with /notion_check (it now diagnoses the
   whole schema in one shot).
-- README + docs/ updates PROPOSED, awaiting approval (see end of session 4 message).
+- Open: /taskdetail could clip at Discord's 2000-char cap on a wide board — offered
+  to drop empty columns or paginate; George hasn't picked.

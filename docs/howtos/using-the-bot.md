@@ -11,7 +11,7 @@ The bot appears in the server as **Sous Chef**. You talk to it with **slash comm
 
 1. Click in the message box of any channel and type `/`.
 2. A menu pops up. Start typing the command name (e.g. `tasks`) to filter it.
-3. Pick the command. If it needs input (a member to pick, a sprint number, a task
+3. Pick the command. If it needs input (a member to pick, a sprint name, a task
    number), Discord shows a little field or picker — fill it in.
 4. Press Enter.
 
@@ -28,7 +28,12 @@ online?", run this. *(Reply: public.)*
 Lists every Notion page and database the bot is currently able to read. Use it to
 confirm the bot can see a page you just shared with it (see "Add a new Notion page"
 below). If a page you expected is missing from the list, it hasn't been shared with
-the bot yet. *(Reply: private — only you see it.)*
+the bot yet.
+
+It also reports **how it reads the task tracker** — which column it's using for the
+assignee, the due date, the sprint and so on, plus anything it couldn't find. If
+`/tasks` is showing the wrong thing after someone edited the Notion board, this is the
+first command to run. *(Reply: private — only you see it.)*
 
 ### Link yourself first: `/associate`
 Before the bot can show you *your* tasks, it needs to know which Notion person you
@@ -46,15 +51,19 @@ Notion accounts later? Just run it again — it re-links. Anyone can run this fo
 so a lead can link the whole team.
 
 ### Set the sprint: `/setsprint` and `/sprint`
-Set the **current sprint** with `/setsprint 2` (anyone can), and check it with
-`/sprint` → *"We're in Sprint 2!"* (public). If no sprint is set, the task commands
+Set the **current sprint** by its **name in Notion** — `/setsprint label:Sprint 1`
+(anyone can) — and check it with `/sprint` → *"We're in Sprint 1!"* (public).
+
+You don't have to type it exactly: `Sprint 1`, `sprint1` and plain `1` all work. If you
+type a sprint that doesn't exist, the bot refuses and lists the ones that do, so you
+never end up silently filtering for nothing. If no sprint is set, the task commands
 still work — they just show tasks across **all** sprints.
 
 ### `/tasks` — your tasks this sprint
 Shows the tasks assigned to **you** in the current sprint, as a numbered list:
 
 ```
-Your tasks — Sprint 2 (3):
+Your tasks — Sprint 1 (3):
 1. Block out kitchen level — In progress — 📅 2026-06-18 — greybox the back-of-house
 2. Fix dialogue camera — Not started — 📅 2026-06-20
 3. Audio pass on plating SFX — Not started — 📅 2026-06-24
@@ -63,16 +72,17 @@ Your tasks — Sprint 2 (3):
 You must be `/associate`d first. *(Reply: private — only you see it.)*
 
 ### `/taskdetail` — one task in full
-`/taskdetail 2` shows **every** property of task #2 from your `/tasks` list — status,
-assignee, due date, priority, department, description, sprint, last updated. The number
-matches what `/tasks` showed. *(Reply: private.)*
+`/taskdetail 2` shows **every** column of task #2 from your `/tasks` list — status,
+assignee, due date, priority, department, sprint, description, and whatever else the
+board has (tags, submission link, approver, epic…). Add a column in Notion and it
+appears here too. The number matches what `/tasks` showed. *(Reply: private.)*
 
 ### `/sprinttasks` — the whole sprint
-Shows **everyone's** tasks in the current sprint, numbered and grouped by department
-(Production → Narrative → Design → Art → Engineering → QA → Audio):
+Shows **everyone's** tasks in the current sprint, numbered and grouped by department —
+in the same order the departments are listed in Notion:
 
 ```
-Sprint 2 — all tasks (12):
+Sprint 1 (12):
 1. Block out kitchen level — In progress — 👤 George Zou — 🏷️ Design
 ...
 ```
@@ -117,6 +127,24 @@ list.
 > database. Sharing a *different* task list with the bot doesn't automatically make
 > `/tasks` read it — that needs a setup change. Ask George if you want the bot
 > pointed at a different tracker.
+
+## If you change the task board in Notion
+
+Renaming a column is fine — the bot recognises the common names for each thing it
+needs (`Assignee`/`Owner`, `Due date`/`Deadline`, `Sprints`/`Sprint`…) and otherwise
+falls back to matching by column *type*. Adding a column is fine too; it just shows up
+in `/taskdetail`.
+
+Two things to know:
+
+1. **Tell George to restart the bot** after any column change. It reads the board's
+   structure once when it starts, so until it restarts it's still working from the old
+   one.
+2. **A column that links to another database** (like `Sprints`) only works if that
+   other database is *also* shared with the bot — sharing the task tracker doesn't
+   cover it. Sprints showing as "1 linked" instead of "Sprint 1" is the tell.
+
+Run `/notion_check` afterwards to see exactly what the bot picked up.
 
 ## Getting help
 

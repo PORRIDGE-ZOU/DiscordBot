@@ -72,4 +72,13 @@ all-sprints with a clear message.
 - [x] store.py sprint as text
 - [x] py_compile clean
 - [ ] Live test on the new workspace (George)
-- [ ] Docs update (proposed after live confirmation)
+- [x] Docs updated (George approved 2026-08-26): README (command table + a "what the
+      task database must contain" role table + relation-sharing note), deep-dive
+      (sprint-as-label, relations, roles-not-names, schema-driven filters, generic
+      extraction), notion-integration-model (relation sharing doesn't cascade,
+      relations filter by page id, schema as the load-bearing call), using-the-bot
+      (/setsprint label, /taskdetail all columns, "if you change the task board"),
+      overview, docs index, and the 2026-07-10 post-mortem's obsolete advice.
+- [x] NEW docs/explainers/schema-driven-notion-columns.md — the teaching artifact
+      (three-way breakage table, roles, claimed-column rule, required-vs-optional
+      rationale, relation indexing, restart rule, how to extend).

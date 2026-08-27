@@ -84,21 +84,55 @@ Visibility: **public** = the whole channel sees it; **private** = only the invok
 | Command | What it does | Visibility |
 |---------|--------------|------------|
 | `/ping` | Replies `pong! 🏓`. Confirms the bot is alive. | public |
-| `/notion_check` | Lists the Notion pages/databases the connection can see. Confirms the Notion link works. | private |
+| `/notion_check` | Lists the Notion pages/databases the connection can see, **plus how the bot reads the task database** — which column fills each role it needs, anything it couldn't find, and every column with its type. First stop when a task command misbehaves. | private |
 | `/intro` | Posts a short blurb of what the bot can do. | public |
 | `/help` | Lists every command and its description (auto-generated). | private |
 | `/associate person:<email or name> member:<@user>` | Links a Notion person to a Discord member, so that member's `/tasks` shows their tasks. Matches by email **or** display name, across workspace members **and** task assignees — so **guests** work too. 1:1 — re-running re-binds. Anyone can run it. | private |
 | `/tasks` | Your own tasks, numbered. Scoped to the current sprint if one is set (otherwise all sprints). Needs you to be `/associate`d. | private |
-| `/taskdetail number:<n>` | Full details of one of your tasks, by its number from `/tasks`. | private |
-| `/setsprint x:<n>` | Sets the team's current sprint (e.g. `2` → filters for `Sprint2`). Anyone can run it. | private |
-| `/sprint` | Reports the current sprint number. | public |
+| `/taskdetail number:<n>` | **Every** property of one of your tasks, by its number from `/tasks` — including columns added to Notion after the bot was written. | private |
+| `/setsprint label:<name>` | Sets the team's current sprint by its **name in Notion** (e.g. `Sprint 1`). Matched loosely — `Sprint 1`, `sprint1` and `1` all work — and validated against the sprints that actually exist. Anyone can run it. | private |
+| `/sprint` | Reports the current sprint. | public |
 | `/sprinttasks [department:<name>]` | All tasks in the current sprint (or all sprints if none set), grouped by department — or just one department if given. | public |
 | `/remind x:<days>` | DMs you `x` days before **each** of your tasks is due. Re-running replaces your previous batch. | private |
 | `/dm message:<…> [member:<@user>]` | Sends a DM (to yourself if no member given) and confirms privately whether it went through. | private |
 | `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel` | Channel reminders: one-shot, weekly (California time), list, cancel. | private |
 
 The Notion-backed commands need `NOTION_TASKS_DB_ID` set to the **database** id (the
-32-hex chunk before `?v=` in the database's URL — not a `/p/` page link). Sprint
-filtering is optional: it applies only when a sprint is set and the DB has a `Sprint`
-column. Associations and the current sprint are stored locally in `botstate.db`
-(gitignored, like `jobs.sqlite`).
+32-hex chunk before `?v=` in the database's URL — not a `/p/` page link). Associations
+and the current sprint are stored locally in `botstate.db` (gitignored, like
+`jobs.sqlite`).
+
+### What the task database must contain
+
+The bot does **not** require specific column names. It resolves what it needs against
+your database's live schema — first by name (a set of accepted aliases per role), then
+by property **type**. Rename `Sprint` to `Sprints`, or `Assignee` to `Owner`, and it
+keeps working.
+
+| The bot needs | Accepted names (any case/spacing) | Or any column of type |
+| --- | --- | --- |
+| **task name** *(required)* | — | `title` |
+| **assignee** *(required)* | Assignee, Assignees, Owner, Assigned to | `people` |
+| status | Status, State, Progress | `status` |
+| due date | Due date, Due, Deadline, End date | `date` |
+| sprint | Sprints, Sprint, Iteration, Cycle | any |
+| department | Department, Dept, Team, Discipline | `select` / `multi_select` |
+| priority | Priority, Importance | — |
+| description | Description, Notes, Details, Summary | — |
+| last updated | Updated at, Last edited | `last_edited_time` |
+
+Only **task name** and **assignee** are required — without them there's nothing to
+show and no way to tell whose task it is, and the task commands say so by name. Every
+other row is optional: a database with no sprint column simply shows all tasks, and a
+missing field is left out of the display rather than erroring.
+
+Run **`/notion_check`** after any Notion schema change to see exactly which column the
+bot picked for each role.
+
+> **If your sprint column is a relation** (it links to a separate Sprints database
+> rather than being a Select), that Sprints database must be **shared with the
+> connection too**. Sharing the task database does *not* cascade to a database it
+> merely links to. Same for any other relation column you want shown by name.
+
+> The schema is read **once per process** — restart the bot after adding, renaming or
+> retyping a Notion column.

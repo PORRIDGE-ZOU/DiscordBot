@@ -16,6 +16,14 @@ Established as the bot is built. Follow these; don't introduce a second way.
 - **Notion**: all calls in `notion_api.py`. Database id in `.env`
   (`NOTION_TASKS_DB_ID`), resolved to a data source id (cached) before querying.
   Filtering is server-side via Notion `filter`, never over all rows in Python.
+- **NEVER hardcode a Notion column name or a filter shape.** Declare what the bot
+  needs as a ROLE in `ROLE_ALIASES` / `ROLE_FALLBACK_TYPES`, resolve it against the
+  live schema (`resolve_roles()`), and build the filter from the type the schema
+  reports (`_eq_filter`). A new column/rename/type change must not need a code edit.
+- **Crucial vs optional roles**: only `name` + `assignee` are required
+  (`REQUIRED_ROLES`). Everything else absent = that filter is skipped and that
+  display line is dropped. Missing a required role raises `MissingPropertyError`,
+  which commands surface verbatim — never a silent empty result.
 - **Slash choices**: dropdowns use `discord.Option(str, choices=[...])`; map each
   choice to its underlying value(s) in a dict (e.g. `TASK_STATUS_CHOICES`).
 - **Visibility**: team-internal connectivity output -> ephemeral; shared team info
@@ -36,6 +44,11 @@ Applies to sqlite (store.py) too — it's blocking; wrap in to_thread.
   (_load_personal_tasks) + sort (_personal_sorted) so task numbers stay consistent.
 - Per-task DM reminder jobs are namespaced "taskremind:<discord_id>:<i>"; keep them
   out of /reminders (channel-only).
+
+- Loose value matching uses `_norm()` (lowercase, alphanumerics only) so
+  "Sprint 1" == "sprint1" == "1". Use it for every user-typed-vs-Notion compare.
+- Relations hold PAGE IDS. Index the related data source ONCE in both directions
+  (`_relation_index`) — never one lookup per row.
 
 ## Discord landmines baked into the code
 - Intents in code MUST match the portal toggles or events arrive empty.

@@ -22,12 +22,14 @@ one feature at a time and is expected to grow.
 - `/ping` — liveness check.
 - `/notion_check` — lists every Notion page/database the bot's connection can see.
 - `/intro`, `/help` — capability blurb (public) and the auto-generated command list.
-- **Sprint + personal tasks:** `/associate` (link a Notion email to a Discord
-  member), `/tasks` + `/taskdetail` (your own tasks this sprint), `/setsprint` +
+- **Sprint + personal tasks:** `/associate` (link a Notion person — by email or
+  display name, guests included — to a Discord member), `/tasks` + `/taskdetail`
+  (your own tasks; scoped to the current sprint if one is set), `/setsprint` +
   `/sprint`, `/sprinttasks [department]` (the whole sprint). See
   `../deep-dives/notion-task-queries.md`.
-- **Reminders:** `/remind` (DM before each of your tasks is due) plus channel
-  reminders `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel`.
+- **Reminders + DMs:** `/remind` (DM before each of your tasks is due), `/dm` (send a
+  DM with a delivery confirmation), plus channel reminders `/remind_in`,
+  `/remind_weekly`, `/reminders`, `/reminder_cancel`.
 
 ## How the code is laid out
 

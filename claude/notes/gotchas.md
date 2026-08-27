@@ -21,3 +21,26 @@
 ## Intents must match portal
 - Intent enabled in code but OFF in Developer Portal = handler silently receives
   nothing. The #1 "why isn't it working" trap.
+
+## A workspace move can break ONE column three different ways (2026-08-26)
+Moving to the "Master Task List" DB, `Sprint` became `Sprints` (name), changed from
+select to **relation** (type), and its values became `Sprint 1` with a space (format).
+Each alone breaks the filter, and the failure modes differ:
+- wrong NAME -> the schema check misses, filter silently dropped -> "all sprints"
+  quietly, which reads as working.
+- wrong TYPE -> `_eq_filter` builds a `rich_text` body for a relation -> Notion 400.
+- wrong VALUE -> filter is valid, matches nothing -> "you have no tasks".
+Only the middle one is loud. Fix was to resolve columns by ROLE from the live schema
+and build filters from the reported type (see conventions.md).
+
+## Notion sharing does NOT cascade across a relation
+Sharing the task DB with the connection does not share a database it merely LINKS to.
+A relation column then returns page ids the bot can't resolve to titles — the Sprints
+DB must be shared separately (••• -> Connections). Tell: sprints display as
+"N linked" instead of "Sprint 1", and /setsprint reports the column links to a
+database the bot can't read.
+
+## Relation filters take a PAGE ID, not the label
+`{"relation": {"contains": "<page-id>"}}`. Resolving "Sprint 1" -> id needs a query
+against the related data source; index it once in both directions and cache, or you
+get an N+1 per task.

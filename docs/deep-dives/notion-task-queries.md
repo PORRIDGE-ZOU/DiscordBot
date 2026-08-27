@@ -24,24 +24,34 @@ Two pieces of state make this work, and **both live in a local SQLite (`store.py
 ## `/associate` — linking the two worlds
 
 ```
-/associate email:george@usc.edu member:@porridge
+/associate person:george@usc.edu member:@porridge
 → ✅ Linked @porridge ↔ George Zou (george@usc.edu).
 ```
 
 - `member` is a Discord **user-picker** (`discord.Option(discord.Member, ...)`), so
   Discord guarantees it's a real member of this server and hands us the **stable user
   ID** — never a username, which can change.
-- The `email` is validated against the Notion workspace: `notion_api.find_user_by_email`
-  pages through `users.list` and matches case-insensitively. No match → the command
-  does nothing and says so. (This needs the integration's **"Read user information"**
-  capability — see `../explainers/notion-integration-model.md`.)
+- `person` is an **email OR a display name**, resolved by
+  `notion_api.find_notion_person` (case-insensitive, email first then name). No match →
+  the command does nothing and says so. (Reading assignee names/emails needs the
+  integration's **"Read user information"** capability — see
+  `../explainers/notion-integration-model.md`.)
+- **Guests are the reason `person` accepts a name.** Notion's `users.list` returns
+  workspace **members only** — guests never appear there, even though they're assigned
+  tasks. A team on guest accounts (to avoid per-seat cost) would be unresolvable by the
+  members list alone. So `find_notion_person` searches **members *plus* everyone who
+  appears as an assignee** (`list_task_assignees`, which harvests people straight from
+  the task rows). Guests frequently have **no email exposed** through the API, so for
+  them you pass their **display name exactly as it shows in the Assignee column**.
 - The binding is **1:1 in both directions**. `store.set_association` deletes any row
-  already holding that email before upserting, so an email can't map to two Discord
+  already holding that key before upserting, so a person can't map to two Discord
   users. It returns what it displaced, and the command reports a re-bind explicitly:
-  *"⚠️ This was already bound! … Now re-bound: …"*.
+  *"⚠️ This was already bound! … Now re-bound: …"*. The key is the email when Notion
+  exposes one, else the display name.
 
 We store the **Notion user id** (a stable uuid), because that's what lets us filter
-tasks by assignee **server-side** (the People filter takes a user id, not an email).
+tasks by assignee **server-side** (the People filter takes a user id, not an email) —
+and that id is present on every assignee, member or guest.
 
 ## Setting the sprint — `/setsprint` and `/sprint`
 
@@ -49,8 +59,16 @@ tasks by assignee **server-side** (the People filter takes a user id, not an ema
 it — it's shared team state). `/sprint` reads it back: *"We're in **Sprint 2**!"*.
 
 The sprint number `2` becomes the Notion filter value **`"Sprint2"`** — the task DB's
-`Sprint` column stores values like `Sprint1`, `Sprint2`. The conversion is a single
-`f"Sprint{n}"` inside `query_tasks`, so the command layer only ever deals in integers.
+`Sprint` column (a Select) stores values named exactly `Sprint1`, `Sprint2`, …. The
+conversion is a single `f"Sprint{n}"` inside `query_tasks`, so the command layer only
+ever deals in integers. (If your Select options are named differently, the filter
+won't match — the names must be `Sprint{n}`.)
+
+**Sprint scoping is optional.** `query_tasks` applies the Sprint filter only when a
+sprint is set **and** the DB actually has a `Sprint` column. With no sprint set (or a
+DB that has no such column), the task commands still work — they just show all sprints,
+and the headers read "all sprints" / "All tasks" instead of "Sprint N". This keeps the
+bot usable before sprints are configured.
 
 ## The one shared list — why task numbers line up
 
@@ -58,9 +76,12 @@ The sprint number `2` becomes the Notion filter value **`"Sprint2"`** — the ta
 your sprint tasks, so "task 3" means the same task in all three. That's enforced by
 two shared helpers in `bot.py`:
 
-- **`_load_personal_tasks(ctx)`** — resolves your association + the current sprint,
-  queries your tasks, returns them sorted. If you're not linked, or no sprint is set,
-  it sends the right ephemeral error and returns `None`; the caller just stops.
+- **`_load_personal_tasks(ctx)`** — resolves your association, queries your tasks
+  (scoped to the current sprint **if one is set**), returns them sorted. If you're not
+  linked, or the Notion query itself fails, it sends the right ephemeral error and
+  returns `None`; the caller just stops. It wraps the query in try/except so a Notion
+  error (e.g. a missing column, a bad DB id) is **reported**, not left hanging on
+  "thinking…".
 - **`_personal_sorted(tasks)`** — the canonical order: **Due date ascending
   (no-due-date last), tiebreak by Task name.** ISO date strings (`2026-06-20`) sort
   correctly as plain strings, so no date parsing is needed for ordering.

@@ -184,3 +184,97 @@ into the team Google Doc). Decisions George locked:
 - George: deploy (git push -> EC2 ./deploy.sh), then test each command. Verify
   property names against the real DB first. After confirmed working: write
   docs/deep-dive + README command-table update (held for approval).
+
+## 2026-07-10 — Session 3 — deploy, rename, new-workspace migration, guest fix
+
+**Shipped + confirmed working live on EC2.**
+
+- Bot RENAMED Aboyeur -> **Sous Chef** (George did the portal side). All active
+  refs updated (INTRO_TEXT, docs, claude notes). Kept "originally Aboyeur" history.
+- Added `/dm message [member]` — DMs self by default (or a member), always ephemeral
+  confirmation to sender; catches discord.Forbidden (DMs off).
+- Deployed Milestone 4 via GitHub. Ops gotchas hit + doc'd: deploy.sh needed
+  chmod +x / `bash deploy.sh`; EC2 main had no upstream (`git branch
+  --set-upstream-to=origin/main main`); ssh needs `-i <steam_key.pem>`.
+- NEW NOTION WORKSPACE migration (old one abandoned). New connection "QLP Bot"
+  (Access token), new DB "Master Tasks Tracker"
+  id=39770e5485b780d69ed8e41939eb8e69 (was given a /p/ PAGE id first -> "is a page
+  not a database"; real id is the chunk before ?v=).
+
+**Bugs found + fixed (all live-confirmed)**
+- `/tasks` hung: missing Sprint col + uncaught Notion error. Fix: try/except in
+  `_load_personal_tasks` (reports error, no hang) + Sprint filter OPTIONAL
+  (`query_tasks` applies it only if sprint set AND PROP_SPRINT in cached schema).
+  Sprint-less -> shows all sprints, headers say "all sprints"/"All tasks".
+- `/associate` failed for teammates: they're Notion GUESTS (cost), and `users.list`
+  returns MEMBERS ONLY. Fix: `/associate` arg renamed email -> `person` (email OR
+  display name); new `find_notion_person` searches members + `list_task_assignees`
+  (harvests assignees from task rows, guests included). Guests often no email ->
+  match by display name. Store keys on email-or-name.
+
+**Docs updated (George approved "update the docs")**
+- README (command table, DB-id note, guest note), docs/summary/overview,
+  deep-dives/notion-task-queries (associate/guests + sprint-optional + error
+  handling), explainers/notion-integration-model (members-vs-guests, page-vs-db id),
+  howtos/using-the-bot (associate by name, /dm, sprint optional), docs/README index.
+- NEW bugs/2026-07-10-notion-workspace-migration.md postmortem.
+
+**Reminders for next session**
+- Schema is cached per process -> RESTART after any Notion column/DB change.
+- Sprint Select options must be named exactly Sprint1/Sprint2... to match f"Sprint{n}".
+- botstate.db associations key on Notion user id from the CURRENT workspace; a
+  workspace switch invalidates old bindings -> everyone re-runs /associate.
+
+**Still untested live**: `/remind` (per-task DM timing), `/taskdetail`, `/sprinttasks`
+department validation. `/tasks` + `/associate` confirmed working.
+
+**Next candidates**: Perforce reporting (discussed — gated on EC2 reachability to the
+P4 server); Milestone 3 recording; test the remaining task commands.
+
+## 2026-08-26 — Session 4 — schema-agnostic Notion layer (2nd workspace move)
+
+**Trigger**: team moved to a new workspace again; new DB "Master Task List".
+`Sprint` -> `Sprints` (renamed), select -> **relation** (retyped), `Sprint1` ->
+`Sprint 1` (revalued). One column, three independent breakages, only one of them loud.
+
+**George approved the plan + all four behavior calls** (claude/tasks/milestone-5-
+schema-agnostic.md): /taskdetail shows ALL properties; /setsprint takes a TEXT
+LABEL not an int; missing crucial column = hard error naming it; /notion_check
+extended with the schema map.
+
+**Built**
+- notion_api.py: PROP_* constants and DEPARTMENT_ORDER DELETED. New role layer —
+  ROLE_ALIASES + ROLE_FALLBACK_TYPES + resolve_roles() (alias pass, then type pass
+  over unclaimed columns), REQUIRED_ROLES = (name, assignee), MissingPropertyError,
+  require_role/check_required, describe_schema(). Relation support:
+  _relation_data_source + _relation_index (one query, cached both directions),
+  relation branch in _eq_filter (filters on page id). get_options(role) covers
+  select/multi_select/status/relation; match_sprint() loose-matches via _norm().
+  query_tasks normalises the stored sprint label before filtering. _prop_value()
+  replaces the six _prop_* extractors — dispatches every Notion type incl. url,
+  files, formula, rollup, unique_id; unknown type -> "" (can't break a command).
+  _task_full gained "all" = every column, roles first then schema order.
+- bot.py: /setsprint label:str (validated, unknown -> lists real options);
+  /sprint + /tasks + /sprinttasks print the label as-is; /taskdetail renders
+  task["all"]; /sprinttasks groups by the schema's dept option order;
+  MissingPropertyError surfaced with a warning sign in the task commands;
+  /notion_check extended with role->column map, missing roles, all columns+types.
+- store.py: current sprint stored as TEXT, not int.
+
+**Verified offline** (no live token for the new workspace) with a simulated Master
+Task List schema + task row: role resolution, guest-safe assignee pick (Approval By
+NOT mistaken for Assignee), sprint matching across 'Sprint 1'/'sprint1'/'1'/'SPRINT-2',
+relation filter -> page id, /taskdetail rendering all 16 columns, unknown-DB fallback
+(weird names, right types) and the missing-assignee hard error. All 4 modules
+py_compile clean.
+
+**George still owes Notion-side**
+- Share the **Sprints** database with the connection (relation target; sharing the
+  task DB does NOT cascade).
+- New connection + token + DB id in EC2 .env, then restart; wipe botstate.db
+  associations (Notion user ids are per-workspace).
+
+**Next**
+- Live test on the new workspace, starting with /notion_check (it now diagnoses the
+  whole schema in one shot).
+- README + docs/ updates PROPOSED, awaiting approval (see end of session 4 message).

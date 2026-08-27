@@ -36,6 +36,10 @@ Each entry below says *why future-you would open it*.
 - **[bugs/2026-05-30-databases-query-removed.md](bugs/2026-05-30-databases-query-removed.md)** —
   the Notion `databases.query` removal and the data-source fix. Open if a Notion
   query suddenly `AttributeError`s.
+- **[bugs/2026-07-10-notion-workspace-migration.md](bugs/2026-07-10-notion-workspace-migration.md)** —
+  what broke moving to a new workspace: page-vs-database id, guests not in
+  `users.list`, missing `Sprint` column. Open when re-pointing the bot at a new
+  workspace or DB.
 
 ---
 

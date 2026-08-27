@@ -70,7 +70,7 @@ async def ping(ctx: discord.ApplicationContext):
 
 @bot.slash_command(
     name="notion_check",
-    description="List the Notion pages/databases the bot can see.",
+    description="List what Notion the bot can see, and how it reads the task database.",
     guild_ids=GUILD_IDS,
 )
 async def notion_check(ctx: discord.ApplicationContext):
@@ -100,13 +100,37 @@ async def notion_check(ctx: discord.ApplicationContext):
         return
 
     lines = [f"- {title}  ·  _{otype}_" for title, otype, _id in items]
-    body = "\n".join(lines)
-    # Discord hard-limits a message to 2000 characters; truncate defensively.
-    if len(body) > 1900:
-        body = body[:1900] + "\n… (truncated)"
-    await ctx.respond(
-        f"Connection can see **{len(items)}** item(s):\n{body}", ephemeral=True
-    )
+    body = f"Connection can see **{len(items)}** item(s):\n" + "\n".join(lines)
+
+    # Second half: how the bot READS the task database. Every task command resolves
+    # what it needs (title, assignee, due date, sprint…) against the live schema, so
+    # this map is the fastest way to see why a command is filtering wrong — a role
+    # showing "—" means the bot found no column for it.
+    try:
+        info = await asyncio.to_thread(notion_api.describe_schema)
+    except Exception as e:
+        body += f"\n\n**Task database:** couldn't read the schema — `{e}`"
+    else:
+        roles = "\n".join(
+            f"- `{role}` → {col if col else '— *(none found)*'}"
+            for role, col in info["roles"].items()
+        )
+        cols = ", ".join(f"{name} (`{ptype}`)" for name, ptype in info["columns"])
+        body += f"\n\n**Task database — what fills each role:**\n{roles}"
+        if info["missing_required"]:
+            body += (
+                "\n⚠️ **Missing required:** "
+                + ", ".join(info["missing_required"])
+                + " — the task commands can't run until these exist."
+            )
+        if info["missing_optional"]:
+            body += (
+                "\nℹ️ Not found (those filters/fields are skipped): "
+                + ", ".join(info["missing_optional"])
+            )
+        body += f"\n\n**Columns ({len(info['columns'])}):** {cols}"
+
+    await ctx.respond(_truncate(body, 1990), ephemeral=True)
 
 
 # --- Sprint + personal task commands (Milestone 4) ---------------------------
@@ -147,6 +171,11 @@ async def _load_personal_tasks(ctx):
         tasks = await asyncio.to_thread(
             notion_api.query_tasks, assoc["notion_user_id"], sprint, None
         )
+    except notion_api.MissingPropertyError as e:
+        # The database is missing a column the bot can't work without — say which,
+        # rather than returning an empty list that reads as "you have no tasks".
+        await ctx.respond(f"⚠️ {e}", ephemeral=True)
+        return None
     except Exception as e:
         await ctx.respond(f"Notion error: `{e}`", ephemeral=True)
         return None
@@ -223,7 +252,8 @@ async def tasks(ctx: discord.ApplicationContext):
     if loaded is None:
         return
     _assoc, sprint, items = loaded
-    scope = f"Sprint {sprint}" if sprint is not None else "all sprints"
+    # `sprint` is the Notion label itself ("Sprint 1", "Summer"), so print it as-is.
+    scope = sprint if sprint else "all sprints"
     if not items:
         await ctx.respond(f"No tasks assigned to you ({scope}).", ephemeral=True)
         return
@@ -262,36 +292,59 @@ async def taskdetail(
         )
         return
     t = items[number - 1]
-    lines = [
-        f"**{t['name']}**",
-        f"• Status: {t['status'] or '—'}",
-        f"• Assignee: {t['assignee'] or '—'}",
-        f"• Due Date: {t['due'] or '—'}",
-        f"• Priority: {t['priority'] or '—'}",
-        f"• Department: {t['department'] or '—'}",
-        f"• Sprint: {t['sprint'] or '—'}",
-        f"• Updated At: {t['updated'] or '—'}",
-        f"• Description: {t['description'] or '—'}",
-    ]
+    # EVERY column this database has, under its own Notion name — the recognised
+    # ones first, then whatever else the team added. Nothing here is hardcoded, so
+    # a new Notion column shows up the next time the bot restarts.
+    lines = [f"**{t['name']}**"]
+    lines += [f"• {column}: {value or '—'}" for column, value in t["all"]]
     await ctx.respond(_truncate("\n".join(lines), 1990), ephemeral=True)
 
 
 @bot.slash_command(
     name="setsprint",
-    description="Set the team's current sprint number.",
+    description="Set the team's current sprint, by its name in Notion.",
     guild_ids=GUILD_IDS,
 )
 async def setsprint(
     ctx: discord.ApplicationContext,
-    x: discord.Option(int, description="Sprint number, e.g. 2"),
+    label: discord.Option(
+        str, description="Sprint name as it appears in Notion, e.g. Sprint 1"
+    ),
 ):
-    """Set the active sprint (shared team state). Anyone can run it."""
+    """Set the active sprint (shared team state). Anyone can run it.
+
+    A LABEL, not a number, because sprint naming is per-workspace. It's validated
+    against the sprint values that actually exist in Notion — whether that column
+    is a select or a relation to a Sprints database — and matched loosely, so
+    "Sprint 1", "sprint1" and "1" all land on the same sprint. An unknown label is
+    rejected with the real list rather than silently matching zero tasks later."""
     await ctx.defer(ephemeral=True)
-    if x < 1:
-        await ctx.respond("Sprint number must be a positive integer.", ephemeral=True)
+    try:
+        matched = await asyncio.to_thread(notion_api.match_sprint, label)
+        options = await asyncio.to_thread(notion_api.get_sprint_options)
+    except notion_api.MissingPropertyError as e:
+        await ctx.respond(f"⚠️ {e}", ephemeral=True)
         return
-    await asyncio.to_thread(store.set_current_sprint, x)
-    await ctx.respond(f"✅ Current sprint set to **Sprint {x}**.", ephemeral=True)
+    except Exception as e:
+        await ctx.respond(f"Notion error: `{e}`", ephemeral=True)
+        return
+
+    if matched is None:
+        if options:
+            await ctx.respond(
+                f"Unknown sprint **{label}**. Valid: {', '.join(options)}.",
+                ephemeral=True,
+            )
+        else:
+            await ctx.respond(
+                "This Notion database has no sprint column, so there's no sprint to "
+                "set — task commands already show every task.",
+                ephemeral=True,
+            )
+        return
+
+    await asyncio.to_thread(store.set_current_sprint, matched)
+    await ctx.respond(f"✅ Current sprint set to **{matched}**.", ephemeral=True)
 
 
 @bot.slash_command(
@@ -300,13 +353,13 @@ async def setsprint(
     guild_ids=GUILD_IDS,
 )
 async def sprint(ctx: discord.ApplicationContext):
-    """Public — report the active sprint number."""
+    """Public — report the active sprint label."""
     await ctx.defer()
     s = await asyncio.to_thread(store.get_current_sprint)
     if s is None:
         await ctx.respond("No sprint set yet — run `/setsprint`.")
     else:
-        await ctx.respond(f"We're in **Sprint {s}**!")
+        await ctx.respond(f"We're in **{s}**!")
 
 
 @bot.slash_command(
@@ -324,8 +377,8 @@ async def sprinttasks(
     department order; with a department -> just that one (validated against the
     Notion Department options)."""
     await ctx.defer()
-    sprint_num = await asyncio.to_thread(store.get_current_sprint)  # may be None (optional)
-    scope = f"Sprint {sprint_num}" if sprint_num is not None else "All tasks"
+    sprint_label = await asyncio.to_thread(store.get_current_sprint)  # may be None
+    scope = sprint_label if sprint_label else "All tasks"
 
     if department:
         try:
@@ -344,8 +397,11 @@ async def sprinttasks(
 
     try:
         items = await asyncio.to_thread(
-            notion_api.query_tasks, None, sprint_num, department
+            notion_api.query_tasks, None, sprint_label, department
         )
+    except notion_api.MissingPropertyError as e:
+        await ctx.respond(f"⚠️ {e}")
+        return
     except Exception as e:
         await ctx.respond(f"Notion error: `{e}`")
         return
@@ -362,7 +418,13 @@ async def sprinttasks(
         ]
         header = f"**{scope} — {department}** ({len(items)}):"
     else:
-        rank = {d: i for i, d in enumerate(notion_api.DEPARTMENT_ORDER)}
+        # Group in the order the departments are defined in Notion (that's the order
+        # they're shown in there too); anything unrecognised sorts last.
+        try:
+            order = await asyncio.to_thread(notion_api.get_department_options)
+        except Exception:
+            order = []
+        rank = {d: i for i, d in enumerate(order)}
         items.sort(key=lambda t: (rank.get(t["department"], len(rank)), t["name"].lower()))
         lines = [
             f"{i}. **{t['name']}** — {t['status'] or '—'} — 👤 {t['assignee'] or '—'} — 🏷️ {t['department'] or '—'}"

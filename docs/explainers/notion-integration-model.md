@@ -107,11 +107,32 @@ builds the matching clause (a `select` `equals`, a `status` `equals`, a `rich_te
 This server-side approach is what makes the task commands fast and lets compound
 queries (assignee = me **and** sprint = current) scale without pulling everything.
 
-## Looking up people: `users.list`
+## Looking up people: members vs guests
 
-`/associate` checks that an email belongs to a real Notion member before binding it.
-That uses `users.list` (paged through in `notion_api.list_workspace_users`), which
-returns every person and bot in the workspace. It requires the connection's **"Read
-user information"** capability (Configuration → Capabilities in the connection
-settings) — without it the call returns nothing and no email will validate. Bot users
-and anyone without an email are skipped.
+`/associate` needs to turn "this email/name" into a Notion **user id** (the thing the
+People filter matches on). Two sources, because one isn't enough:
+
+- `users.list` (`notion_api.list_workspace_users`) returns workspace **members** and
+  bots. It requires the connection's **"Read user information"** capability
+  (Configuration → Capabilities) — without it the call returns nothing.
+- **Guests are NOT returned by `users.list`** — a documented Notion limitation. A team
+  on guest accounts (common, to avoid per-seat cost) would be invisible to the members
+  list, even though guests are assigned tasks.
+
+So `find_notion_person` also harvests identities from the task rows themselves
+(`list_task_assignees`): every person in an `Assignee` (people) property, guests
+included. It matches the `/associate` input by **email first, then display name** —
+because guests frequently have **no email exposed** through the API, so a name is
+often the only handle. The Notion **user id** is always present on the assignee object,
+which is all we actually need to store and filter by.
+
+## The id you configure must be a DATABASE id, not a page id
+
+`NOTION_TASKS_DB_ID` must be the **database** id. Notion has two easy-to-confuse links:
+
+- A **`/p/…` page link** (e.g. from "Copy link" on a page that *contains* a database)
+  gives a **page** id. Passing it yields `databases.retrieve → "… is a page, not a
+  database"`.
+- Opening the database as a full-page view and copying its link gives
+  `…/<DATABASE_ID>?v=<VIEW_ID>`. The **32-hex chunk before `?v=`** is the database id;
+  the `v=` part is just a saved view — ignore it.

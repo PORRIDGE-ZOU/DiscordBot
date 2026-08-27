@@ -35,16 +35,20 @@ Before the bot can show you *your* tasks, it needs to know which Notion person y
 are. Run this **once**:
 
 ```
-/associate email:<your Notion email> member:@you
+/associate person:<your Notion email or display name> member:@you
 ```
 
-Pick yourself from the member list and give the email on your Notion account. The bot
-confirms the link (privately). If you ever change Notion accounts, just run it again —
-it re-links. Anyone can run this for anyone, so a lead can link the whole team.
+Pick yourself from the member list, and for `person` give either your Notion **email**
+or your **display name exactly as it appears in the Assignee column** of the task
+tracker. Name works even for **guest** accounts (which don't have a full workspace
+membership) — so everyone on the team can be linked. The bot confirms privately. Change
+Notion accounts later? Just run it again — it re-links. Anyone can run this for anyone,
+so a lead can link the whole team.
 
 ### Set the sprint: `/setsprint` and `/sprint`
-The task commands are scoped to the **current sprint**. Set it with `/setsprint 2`
-(anyone can). Check it any time with `/sprint` → *"We're in Sprint 2!"* (public).
+Set the **current sprint** with `/setsprint 2` (anyone can), and check it with
+`/sprint` → *"We're in Sprint 2!"* (public). If no sprint is set, the task commands
+still work — they just show tasks across **all** sprints.
 
 ### `/tasks` — your tasks this sprint
 Shows the tasks assigned to **you** in the current sprint, as a numbered list:
@@ -86,6 +90,11 @@ reminders. *(Reply: private.)*
 > Two kinds of reminders: `/remind` is about **your tasks' due dates**. The
 > `/remind_in` and `/remind_weekly` commands post to a **channel** on a clock you set —
 > different tool, see `/help`.
+
+### `/dm` — send a direct message
+`/dm message:<text>` DMs the message to **you** and privately confirms it was sent —
+handy for testing that the bot can reach you. Add `member:@someone` to DM them instead.
+If their DMs are closed, the bot tells you it couldn't deliver. *(Reply: private.)*
 
 ## Add a new Notion page for the bot to read
 

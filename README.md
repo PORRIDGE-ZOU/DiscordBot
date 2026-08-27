@@ -87,14 +87,18 @@ Visibility: **public** = the whole channel sees it; **private** = only the invok
 | `/notion_check` | Lists the Notion pages/databases the connection can see. Confirms the Notion link works. | private |
 | `/intro` | Posts a short blurb of what the bot can do. | public |
 | `/help` | Lists every command and its description (auto-generated). | private |
-| `/associate email:<…> member:<@user>` | Links a Notion account (by email) to a Discord member, so that member's `/tasks` shows their tasks. 1:1 — re-running re-binds. Anyone can run it. | private |
-| `/tasks` | Your own tasks in the current sprint, numbered. Needs you to be `/associate`d and a sprint to be set. | private |
+| `/associate person:<email or name> member:<@user>` | Links a Notion person to a Discord member, so that member's `/tasks` shows their tasks. Matches by email **or** display name, across workspace members **and** task assignees — so **guests** work too. 1:1 — re-running re-binds. Anyone can run it. | private |
+| `/tasks` | Your own tasks, numbered. Scoped to the current sprint if one is set (otherwise all sprints). Needs you to be `/associate`d. | private |
 | `/taskdetail number:<n>` | Full details of one of your tasks, by its number from `/tasks`. | private |
 | `/setsprint x:<n>` | Sets the team's current sprint (e.g. `2` → filters for `Sprint2`). Anyone can run it. | private |
 | `/sprint` | Reports the current sprint number. | public |
-| `/sprinttasks [department:<name>]` | All tasks in the current sprint, grouped by department — or just one department if given. | public |
-| `/remind x:<days>` | DMs you `x` days before **each** of your current-sprint tasks is due. Re-running replaces your previous batch. | private |
+| `/sprinttasks [department:<name>]` | All tasks in the current sprint (or all sprints if none set), grouped by department — or just one department if given. | public |
+| `/remind x:<days>` | DMs you `x` days before **each** of your tasks is due. Re-running replaces your previous batch. | private |
+| `/dm message:<…> [member:<@user>]` | Sends a DM (to yourself if no member given) and confirms privately whether it went through. | private |
 | `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel` | Channel reminders: one-shot, weekly (California time), list, cancel. | private |
 
-The Notion-backed commands need `NOTION_TASKS_DB_ID` set. Associations and the
-current sprint are stored locally in `botstate.db` (gitignored, like `jobs.sqlite`).
+The Notion-backed commands need `NOTION_TASKS_DB_ID` set to the **database** id (the
+32-hex chunk before `?v=` in the database's URL — not a `/p/` page link). Sprint
+filtering is optional: it applies only when a sprint is set and the DB has a `Sprint`
+column. Associations and the current sprint are stored locally in `botstate.db`
+(gitignored, like `jobs.sqlite`).

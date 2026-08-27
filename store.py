@@ -130,10 +130,15 @@ def set_config(key, value):
 
 
 def get_current_sprint():
-    """Current sprint number as an int, or None if unset."""
+    """Current sprint LABEL as a string, or None if unset.
+
+    Stored as free text (not a number) because sprint names differ per workspace —
+    "Sprint 1", "Summer", "S3". notion_api matches it loosely against the real
+    options, so an older numeric value ("2") still resolves.
+    """
     val = get_config("current_sprint")
-    return int(val) if val is not None else None
+    return val or None
 
 
-def set_current_sprint(x):
-    set_config("current_sprint", int(x))
+def set_current_sprint(label):
+    set_config("current_sprint", str(label))

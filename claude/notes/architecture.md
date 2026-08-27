@@ -38,15 +38,27 @@ claude/           # Claude's workspace (tasks, notes, decisions, memory)
   queried in the data source. We store the DATABASE id (`NOTION_TASKS_DB_ID`),
   resolve it to a data source id once (cached), and query that.
 - Filtering is SERVER-SIDE (Notion's `filter`), never client-side over all rows.
+- **Schema-driven, not name-driven (2026-08-26).** The bot declares ROLES it needs
+  (name, assignee, status, due, sprint, department, priority, description, updated)
+  and resolves each to a real column in two passes: name alias, then property TYPE
+  over unclaimed columns. `name` = whichever property has type "title".
+  Required = name + assignee; the rest degrade. Every filter body is built from the
+  type the schema reports, so select/status/relation/multi_select/number all work
+  through one call site.
+- Relations are indexed once per column (page id <-> title, both directions) so
+  filtering by label and displaying a label are each O(1) after a single query.
+- Per-process caches: `_data_source_id`, `_schema`, `_roles`, `_relation_cache`.
+  RESTART after any Notion schema change.
 
 ## Current commands
 - `/ping` — liveness.
 - `/notion_check` — list everything the connection can see (ephemeral).
 - `/intro` (public), `/help` (ephemeral, auto-generated).
 - Channel reminders: `/remind_in`, `/remind_weekly`, `/reminders`, `/reminder_cancel`.
-- Milestone 4 (built, untested live): `/associate` (link Notion email <-> Discord
-  member), `/tasks` + `/taskdetail #` (personal, ephemeral), `/setsprint` + `/sprint`,
-  `/sprinttasks [dept]` (public), `/remind x` (per-task DMs before due).
+- `/associate` (link a Notion person <-> Discord member), `/tasks` +
+  `/taskdetail #` (personal, ephemeral), `/setsprint label` + `/sprint`,
+  `/sprinttasks [dept]` (public), `/remind x` (per-task DMs before due), `/dm`.
+- `/notion_check` also prints the resolved role->column map + every column's type.
 
 ## Milestone 4 shape
 - Personal-task commands share ONE loader (`_load_personal_tasks`) + ONE sort
@@ -54,6 +66,9 @@ claude/           # Claude's workspace (tasks, notes, decisions, memory)
   /tasks, /taskdetail, /remind.
 - query_tasks(assignee_id, sprint, department) builds a type-aware AND filter using
   the cached data-source schema (data_sources.retrieve). Server-side filtering.
+  `sprint` is a LABEL string, normalised through match_sprint() before filtering.
+- /taskdetail renders task["all"] — every column in the DB, roles first — so new
+  Notion columns appear without a code change.
 - Bindings + sprint in store.py SQLite; Notion untouched (read-only).
 
 ## Not built yet

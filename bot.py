@@ -794,13 +794,20 @@ def _timeoff_lines(dated, unscheduled, today):
     if unscheduled:
         if lines:
             lines.append("")
-        lines.append("**Unscheduled** (no date given yet)")
+        lines.append("**No date given** — I couldn't pin these to a day:")
         for entry in unscheduled:
             posted = entry["posted_at"].strftime("%b %-d, %-I:%M %p")
-            lines.append(
-                f"• **{entry['author']}** said they won't be available for the next "
-                f"**{entry['event']}** — posted {posted}"
-            )
+            what = entry["event"] or "a session"
+            bits = [f"• **{entry['author']}** — won't make **{what}**"]
+            if entry.get("summary"):
+                bits.append(f"_{entry['summary']}_")
+            bits.append(f"posted {posted}")
+            line = " — ".join(bits)
+            # Link back to the original post: an entry the parser couldn't date is
+            # exactly the one worth reading in full before trusting it.
+            if entry.get("jump_url"):
+                line += f" · [original]({entry['jump_url']})"
+            lines.append(line)
     return lines
 
 

@@ -78,4 +78,8 @@ PLUS a "next thurs" engineering-meeting entry).
       examples + stale-unresolved + leap-year month bounds (OpenAI SDK stubbed)
 - [ ] George: pip install -r requirements.txt, OPENAI_API_KEY + TIMEOFF_CHANNEL_ID
       into the EC2 .env, restart, run /time-off-this-month to eyeball the parse
+- [x] LIVE RUN 2026-08-31 FAILED — messages parsed in isolation lost conversational
+      meaning. Fixed with CONTEXT_MESSAGES=8 + prompt rewrite + context in cache key
+      + jump links. See notes/gotchas.md and the session log.
+- [ ] Re-run live to confirm the Oct 11 derivation
 - [ ] Docs (deep-dive + README + howto) — held for approval after live check

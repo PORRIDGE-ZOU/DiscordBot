@@ -47,6 +47,13 @@ UNRESOLVED_VALID_DAYS = 14
 # still amortising the system prompt across a batch.
 BATCH_SIZE = 20
 
+# How many preceding messages travel with each message as read-only context.
+# This channel is a CONVERSATION, not a list of independent notices: "I also can't
+# make it", "that weekend", and a date established upthread ("fall recess/oct 11")
+# are all unreadable without the messages around them. Parsing each post alone was
+# the original design error here.
+CONTEXT_MESSAGES = 8
+
 # Anything outside this set is treated as "unspecified" rather than shown verbatim.
 PARTS_OF_DAY = ("all day", "morning", "afternoon", "evening")
 
@@ -137,6 +144,18 @@ For each numbered message, return its entries. A message may produce zero entrie
 it isn't about being unavailable), one entry, or several (if it describes more than
 one absence).
 
+CONVERSATION CONTEXT: these messages are consecutive posts in one channel, so they
+refer to each other. Read the earlier messages before deciding what a later one means:
+- "I also can't make it" / "same here" / "me too" -> the speaker is describing the
+  SAME absence someone just described. Extract it for THIS author, resolving what
+  "it" is from the earlier message.
+- "that weekend", "that day", "the one you mentioned" -> resolve against the earlier
+  message that introduced it.
+- If ANY earlier message pins a date to a named occasion ("fall recess/oct 11", "lab
+  is on the 14th"), use that date when a later message refers to that occasion. This
+  is a derived date, not a guess — fill it in and set resolved=true.
+Messages in the CONTEXT section are background only: never produce entries for them.
+
 TIMEZONE: every date is America/Los_Angeles. Each message comes with the local LA date
 and weekday it was posted. Resolve all relative expressions against THAT timestamp:
 - "today" / "tonight" -> the posting date
@@ -160,15 +179,20 @@ Never invent a date you cannot derive from the message plus its posting timestam
 An unresolved entry is correct and useful; a guessed date is not.
 
 OTHER FIELDS:
-- "event": only when they name a specific recurring team event (engineering meeting,
-  work session, playtest, standup, all-hands). Not for personal activities.
+- "event": the occasion they'll miss, as specifically as they said it. Keep the whole
+  identifying phrase — "sunday lab the weekend of fall recess", not just "lab";
+  "thursday engineering meeting", not just "meeting". The reader needs to know WHICH
+  one. Team occasions only (lab, class, engineering meeting, work session, playtest,
+  standup, all-hands), not personal activities.
 - "part_of_day": only when they scope it ("in the evening", "morning only"). Use
   "all day" when they're out for whole days, null when unclear.
 - "summary": a short phrase, under 60 characters, giving their reason or context
   ("driving to LA with family", "picking up gf at LAX"). Empty string if none.
 
 Only count messages where the AUTHOR is describing their OWN unavailability. Ignore
-questions, replies about someone else, and general chatter.\
+questions, announcements about the schedule itself, and general chatter. Someone
+saying "we won't have lab that weekend" is announcing a schedule change, not
+requesting time off — no entry.\
 """
 
 
@@ -176,21 +200,37 @@ def _hash(text):
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _format_for_model(index, msg):
+def _format_for_model(label, msg):
     """One message as the model sees it. The posted line is load-bearing — without
     it, 'tmr' and 'next thurs' can't be resolved."""
     local = msg["posted_at"].astimezone(LA)
     return (
-        f"[{index}]\n"
+        f"[{label}]\n"
         f"author: {msg['author_name']}\n"
         f"posted: {local.strftime('%Y-%m-%d %H:%M')} ({local.strftime('%A')}) America/Los_Angeles\n"
         f"message: {msg['text']}\n"
     )
 
 
-def _parse_batch(batch):
-    """Send up to BATCH_SIZE messages in one call. Returns {index: [entry, ...]}."""
-    payload = "\n".join(_format_for_model(i, m) for i, m in enumerate(batch))
+def _context_for(messages, position):
+    """The CONTEXT_MESSAGES posts immediately before `position`."""
+    return messages[max(0, position - CONTEXT_MESSAGES) : position]
+
+
+def _parse_batch(batch, context):
+    """Parse one batch, with `context` messages supplied as background only.
+
+    Returns {index: [entry, ...]}. The batch is a contiguous run of channel history,
+    so a message can also be resolved against earlier messages in the same batch.
+    """
+    parts = []
+    if context:
+        parts.append(
+            "--- EARLIER MESSAGES (context only — do NOT produce entries for these) ---"
+        )
+        parts += [_format_for_model(f"context {i}", m) for i, m in enumerate(context)]
+        parts.append("--- MESSAGES TO EXTRACT FROM ---")
+    payload = "\n".join(parts + [_format_for_model(i, m) for i, m in enumerate(batch)])
     response = _get_client().chat.completions.create(
         model=_model(),
         temperature=0,  # deterministic: the same message should parse the same way
@@ -257,10 +297,21 @@ def _as_date(value):
         return None
 
 
+def _cache_key(text, context):
+    """Hash of the message AND the conversation around it.
+
+    Context is part of the key because it changes the answer: "I also can't make it"
+    parses differently depending on what came before. When the surrounding messages
+    change, the parse is redone rather than served stale from cache.
+    """
+    blob = text + "\n||CONTEXT||\n" + "\n".join(m.get("text", "") for m in context)
+    return _hash(blob)
+
+
 def load_entries(messages):
     """Parse every message (cached) and return a flat list of entries.
 
-    `messages` is a list of plain dicts from bot.py:
+    `messages` is a chronological list of plain dicts from bot.py:
         {"id", "author_id", "author_name", "posted_at" (aware datetime), "text",
          "jump_url"}
 
@@ -269,34 +320,53 @@ def load_entries(messages):
     call it via asyncio.to_thread.
     """
     entries = []
-    pending = []  # messages with no usable cache entry, to be parsed in batches
+    pending = []  # (position, msg, cache_key) for anything not already parsed
 
-    for msg in messages:
+    for position, msg in enumerate(messages):
         text = (msg.get("text") or "").strip()
         if not text:
             continue
-        cached = store.get_timeoff_cached(msg["id"], _hash(text))
+        key = _cache_key(text, _context_for(messages, position))
+        cached = store.get_timeoff_cached(msg["id"], key)
         if cached is not None:
             entries.extend(_attach(json.loads(cached), msg))
         else:
-            pending.append(msg)
+            pending.append((position, msg, key))
 
     for start in range(0, len(pending), BATCH_SIZE):
-        batch = pending[start : start + BATCH_SIZE]
-        parsed = _parse_batch(batch)
-        for index, msg in enumerate(batch):
+        chunk = pending[start : start + BATCH_SIZE]
+        batch = [msg for _pos, msg, _key in chunk]
+        context = _batch_context(messages, chunk)
+        parsed = _parse_batch(batch, context)
+        for index, (_pos, msg, key) in enumerate(chunk):
             raw_entries = parsed.get(index, [])
             store.set_timeoff_cached(
                 msg["id"],
                 msg.get("author_id"),
                 msg["author_name"],
                 msg["posted_at"].isoformat(),
-                _hash(msg["text"].strip()),
+                key,
                 json.dumps(raw_entries),
             )
             entries.extend(_attach(raw_entries, msg))
 
     return entries
+
+
+def _batch_context(messages, chunk):
+    """Every context message any member of this batch needs, deduped and in order.
+
+    Usually the pending messages are one contiguous run (a first parse, or the new
+    tail since last time) — but when they're scattered, each still has to arrive with
+    its own lead-in, so we union them rather than assume adjacency.
+    """
+    in_batch = {msg["id"] for _pos, msg, _key in chunk}
+    context = {}
+    for position, _msg, _key in chunk:
+        for earlier in _context_for(messages, position):
+            if earlier["id"] not in in_batch:
+                context[earlier["id"]] = earlier
+    return sorted(context.values(), key=lambda m: m["posted_at"])
 
 
 def _attach(raw_entries, msg):

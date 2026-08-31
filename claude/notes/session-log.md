@@ -353,3 +353,42 @@ _clean_entry on backwards ranges / missing end / junk dates.
   held for approval.
 - Watch: /taskdetail and both time-off commands can clip at Discord's 2000-char cap
   on a busy month. Pagination offered, not yet chosen.
+
+## 2026-08-31 — Session 5 — time-off first live run: wrong answers, root cause, fix
+
+**George ran /time-off-recently. Output was wrong** — three people listed as
+unavailable Aug 31–Sep 6 who were all discussing **Oct 11** (fall recess Sunday lab).
+
+**Root cause: my design error.** load_entries sent each message to the model in
+isolation. In the real thread the date ("fall recess/oct 11") was in LiAn's question
+40 minutes earlier, and hailey's post was "I ALSO won't be able to attend sunday
+lab!" — a pure reply. Neither is parseable alone, so both became undated, and the
+14-day rule surfaced them in the 7-day view.
+
+**Fixed**
+- CONTEXT_MESSAGES = 8: every message is parsed with its preceding 8 posts as
+  read-only context. `_context_for` / `_batch_context` (unions the lead-in for every
+  pending message, so a scattered re-parse still gets its context, not just the
+  first item's).
+- Prompt: new CONVERSATION CONTEXT section — resolve "also"/"same here"/"that
+  weekend" against earlier posts; a date pinned upthread is a DERIVED date, fill it
+  in. Context messages must never produce entries of their own.
+- Prompt: `event` must keep the full identifying phrase ("sunday lab the weekend of
+  fall recess", not "lab"). The bare "lab" in the bad output threw away the part a
+  human needed.
+- Prompt: an announcement about the schedule ("we won't have lab that weekend") is
+  NOT a time-off request — no entry.
+- Cache key is now hash(text + context) — context changes the answer, so it belongs
+  in the key. Old rows miss and re-parse automatically; no manual cache clear.
+- Rendering: undated entries now show the specific phrase, the reason, and a
+  [original] jump link. jump_url was being collected and never used.
+
+**Verified offline** with George's exact thread (OpenAI stubbed): the payload now
+carries all six messages including the oct-11 line; the cache key differs with vs
+without context; a lone pending message still receives its five preceding posts.
+
+**NOT verified**: whether the model now actually derives Oct 11. Needs a live run.
+
+**Still open (flagged to George, not changed)**: an undated entry ages out after 14
+days rather than when its event passes — "Miles, next lab, posted Aug 23" shows
+through Sep 6 whether or not that lab already happened.

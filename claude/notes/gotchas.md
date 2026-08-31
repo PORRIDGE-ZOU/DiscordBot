@@ -44,3 +44,31 @@ database the bot can't read.
 `{"relation": {"contains": "<page-id>"}}`. Resolving "Sprint 1" -> id needs a query
 against the related data source; index it once in both directions and cache, or you
 get an N+1 per task.
+
+## A channel is a CONVERSATION — parsing messages in isolation loses the meaning
+First live run of /time-off-recently (2026-08-31) reported three people as
+unavailable "this week" who were actually talking about **October 11**.
+
+Cause: each message was sent to the model ALONE.
+- "I won't be able to attend sunday lab the weekend of fall recess" is undatable by
+  itself. The date lived in a DIFFERENT message 40 min earlier ("fall recess/oct 11").
+- "I **also** won't be able to attend sunday lab!" is a reply. With nothing to refer
+  to, "also" is meaningless.
+Both fell into the undated bucket, and the 14-day-validity rule then surfaced them
+in the next-7-days view — a confidently wrong answer, the exact failure mode the
+design was supposed to avoid.
+
+Fix: CONTEXT_MESSAGES=8 preceding posts travel with every message as read-only
+context; the prompt has an explicit CONVERSATION CONTEXT section for "also"/"same
+here"/"that weekend" and for dates pinned upthread. The cache key is now
+hash(text + context), so changing context correctly invalidates a stale parse.
+
+Generalised lesson: **when an LLM parses user-generated text, the unit of meaning is
+rarely the unit of storage.** Ask what a human would need to read to understand this
+one message, and send that.
+
+## An undated entry ages out on a timer, not on its event
+An entry with no derivable date is shown for UNRESOLVED_VALID_DAYS (14) after
+posting. If the session it refers to already happened — or is two months out — the
+window is simply wrong. Undated entries should be read as "someone flagged
+something", not as "this person is out this week".

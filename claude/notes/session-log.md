@@ -424,3 +424,16 @@ clearing _pending.
 client getter. A third OpenAI feature should trigger a shared openai_client.py.
 
 **Next**: deploy + try it. Nothing else pending on this one.
+
+## 2026-08-31 — Session 5 (cont.) — /intro + /help refresh
+
+- INTRO_TEXT: added time off, /dm, and the joke commands.
+- /help was ALREADY complete (it builds from bot.application_commands), but 20
+  commands as one flat alphabetical list was unreadable. Added HELP_SECTIONS —
+  headings + order ONLY; names/descriptions still come from what's registered, and
+  anything not listed in HELP_SECTIONS falls through to an "Other" section so a new
+  command can never silently disappear from /help.
+- Fixed a stale description: /associate said "(by email)" — it has taken email OR
+  display name since the guest fix on 2026-07-10. That string is what /help shows.
+- Rendered both offline from the real source: 20 commands, none orphaned into
+  "Other", 1501 chars against Discord's 2000 cap.

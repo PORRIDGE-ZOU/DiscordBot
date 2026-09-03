@@ -187,7 +187,7 @@ async def _load_personal_tasks(ctx):
 
 @bot.slash_command(
     name="associate",
-    description="Link a Notion account (by email) to a Discord member for task queries.",
+    description="Link a Notion person (email or name) to a Discord member for task queries.",
     guild_ids=GUILD_IDS,
 )
 async def associate(
@@ -507,9 +507,29 @@ INTRO_TEXT = (
     "• 📋 Show your sprint tasks — `/tasks`, `/taskdetail`\n"
     "• 🗂️ Show the whole sprint — `/sprinttasks` (optionally by department)\n"
     "• 🏃 Track the sprint — `/sprint`, `/setsprint`\n"
-    "• ⏰ Remind you before tasks are due — `/remind`\n"
+    "• 🌴 Say who's unavailable — `/time-off-recently`, `/time-off-this-month`\n"
+    "• ⏰ Remind you before your tasks are due — `/remind`\n"
     "• ⏲️ Channel reminders, one-time or weekly — `/remind_in`, `/remind_weekly`\n"
+    "• ✉️ Send a DM and confirm it arrived — `/dm`\n"
+    "• 🍳 Tell you a joke you have to guess — `/joke`, `/joke-reply`\n"
     "Type `/help` for the full list."
+)
+
+# Grouping for /help. Only the ORDER and headings live here — the command names and
+# descriptions still come from what's actually registered, so /help can't drift.
+# Anything missing from this map still shows up, under "Other", so a new command can
+# never silently vanish from the list just because nobody updated this.
+HELP_SECTIONS = (
+    ("📋 Tasks & sprints",
+     ("associate", "tasks", "taskdetail", "sprint", "setsprint", "sprinttasks")),
+    ("🌴 Time off",
+     ("time-off-recently", "time-off-this-month")),
+    ("⏰ Reminders & messages",
+     ("remind", "remind_in", "remind_weekly", "reminders", "reminder_cancel", "dm")),
+    ("🍳 Fun",
+     ("joke", "joke-reply")),
+    ("🔧 Bot & setup",
+     ("ping", "notion_check", "intro", "help")),
 )
 
 
@@ -529,12 +549,30 @@ async def intro(ctx: discord.ApplicationContext):
     guild_ids=GUILD_IDS,
 )
 async def help_command(ctx: discord.ApplicationContext):
-    """Private — auto-generated from the registered slash commands so it never
-    drifts out of sync with what the bot actually offers."""
-    lines = ["**Commands:**"]
-    for cmd in sorted(bot.application_commands, key=lambda c: c.name):
-        lines.append(f"- `/{cmd.name}` — {cmd.description}")
-    await ctx.respond("\n".join(lines), ephemeral=True)
+    """Private — built from the registered slash commands, so it never drifts out of
+    sync with what the bot actually offers. HELP_SECTIONS only supplies the grouping;
+    any command it doesn't mention still appears under "Other"."""
+    registered = {cmd.name: cmd for cmd in bot.application_commands}
+    lines = []
+
+    for heading, names in HELP_SECTIONS:
+        listed = [registered.pop(name) for name in names if name in registered]
+        if not listed:
+            continue
+        lines.append(f"\n**{heading}**")
+        lines += [f"- `/{cmd.name}` — {cmd.description}" for cmd in listed]
+
+    # Whatever's left is a command nobody added to HELP_SECTIONS. Show it rather
+    # than hide it — a missing group heading is a smaller problem than a missing
+    # command.
+    if registered:
+        lines.append("\n**Other**")
+        lines += [
+            f"- `/{cmd.name}` — {cmd.description}"
+            for cmd in sorted(registered.values(), key=lambda c: c.name)
+        ]
+
+    await ctx.respond(_truncate("\n".join(lines).strip(), 1990), ephemeral=True)
 
 
 # --- Reminders --------------------------------------------------------------

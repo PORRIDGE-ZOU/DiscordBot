@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 import discord
 from dotenv import load_dotenv
 
+import joke as joke_api
 import notion_api
 import scheduler
 import store
@@ -872,6 +873,78 @@ async def time_off_this_month(ctx: discord.ApplicationContext):
         + "\n".join(_timeoff_lines(dated, unscheduled, today))
     )
     await ctx.respond(_truncate(body, 1990), ephemeral=True)
+
+
+# --- Jokes -------------------------------------------------------------------
+# Two halves of one bit: /joke shows a setup and quietly holds the punchline,
+# /joke-reply takes your guess and pays it off. Public on purpose — the guessing
+# is the point, and it only works if the channel can watch. Pending jokes live in
+# joke_api's in-memory dict, so a restart forgets them (by design).
+
+
+@bot.slash_command(
+    name="joke",
+    description="Sous Chef tells you a joke — you have to guess the punchline.",
+    guild_ids=GUILD_IDS,
+)
+async def joke(ctx: discord.ApplicationContext):
+    """Ask for a joke. Only the setup is revealed; the punchline waits for a guess.
+
+    Public, unlike most commands here — a joke nobody else can see isn't much of a
+    joke. Running it again replaces whatever you had pending."""
+    await ctx.defer()
+    try:
+        setup = await asyncio.to_thread(joke_api.new_joke, ctx.author.id)
+    except KeyError as e:
+        await ctx.respond(f"⚠️ Missing config: `{e.args[0]}` isn't set in my `.env`.")
+        return
+    except Exception as e:
+        await ctx.respond(f"Couldn't think of one: `{e}`")
+        return
+
+    await ctx.respond(
+        f"🍳 **{setup}**\n\n"
+        f"{ctx.author.mention} — take a guess with `/joke-reply guess:<your answer>`"
+    )
+
+
+@bot.slash_command(
+    name="joke-reply",
+    description="Answer the joke Sous Chef told you, and get the punchline.",
+    guild_ids=GUILD_IDS,
+)
+async def joke_reply(
+    ctx: discord.ApplicationContext,
+    guess: discord.Option(str, description="Your guess at the punchline"),
+):
+    """Reveal the punchline for the caller's pending joke, with a reaction to their
+    guess. The joke is consumed — one payoff per setup."""
+    await ctx.defer()
+    try:
+        result = await asyncio.to_thread(joke_api.answer, ctx.author.id, guess)
+    except KeyError as e:
+        await ctx.respond(f"⚠️ Missing config: `{e.args[0]}` isn't set in my `.env`.")
+        return
+    except Exception as e:
+        await ctx.respond(f"Something went wrong: `{e}`")
+        return
+
+    # Say so plainly rather than inventing a joke to answer — including after a
+    # restart, which wipes every joke in flight.
+    if result is None:
+        await ctx.respond(
+            f"I haven't told you a joke yet, {ctx.author.mention} — so there's "
+            "nothing to answer. Run `/joke` first.\n"
+            "_(If I did tell you one, I've been restarted since and forgotten it.)_"
+        )
+        return
+
+    setup, said, reaction, punchline = result
+    lines = [f"🍳 **{setup}**", f"> {ctx.author.mention} said: _{said}_"]
+    if reaction:
+        lines.append(reaction)
+    lines.append(f"\n👉 **{punchline}**")
+    await ctx.respond(_truncate("\n".join(lines), 1990))
 
 
 # bot.run() opens the gateway connection and BLOCKS forever — the bot is a

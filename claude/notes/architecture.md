@@ -15,6 +15,8 @@ store.py          # Local bot state: Discord<->Notion associations, current spri
                   #   time-off parse cache. stdlib sqlite3 (botstate.db).
 timeoff.py        # #time-off channel -> dated entries. OpenAI (sync SDK, to_thread).
                   #   Knows nothing about Discord; bot.py hands it plain dicts.
+joke.py           # /joke + /joke-reply. OpenAI. Pending jokes in a MODULE-LEVEL
+                  #   DICT on purpose -> a restart forgets them.
 requirements.txt  # py-cord, python-dotenv, notion-client, apscheduler, SQLAlchemy
 .env / .env.example  # secrets by name; real values only in .env (gitignored)
 README.md         # human setup + run + command reference
@@ -83,6 +85,21 @@ claude/           # Claude's workspace (tasks, notes, decisions, memory)
 - Entries are resolved (real dates) or unresolved (named event only). Unresolved
   show for UNRESOLVED_VALID_DAYS=14 from posting.
 - All windowing in America/Los_Angeles dates. Dated entries match by RANGE OVERLAP.
+
+## Joke layer (Milestone 7)
+- Setup AND punchline generated in ONE call; only the setup is shown, punchline
+  held in _pending[discord_id]. Improvising the punchline after the guess was
+  considered and rejected — the payoff doesn't land when there was no committed
+  answer to find.
+- Second (small) call reacts to the guess. Wrapped in try/except: if it fails the
+  punchline still lands. The garnish must never cost the meal.
+- In-memory by design (George): restart forgets, /joke-reply says so plainly.
+- Public, unlike most commands — the guessing needs an audience.
+
+## Known duplication (flagged, NOT refactored)
+timeoff.py and joke.py each have their own _get_client()/_model() for OpenAI. Two
+copies is tolerable; a THIRD OpenAI feature should trigger extracting a shared
+openai_client.py. Deliberately left alone to keep the joke change scoped.
 
 ## Not built yet
 Meeting recording · transcription · Notion page reading.

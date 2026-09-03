@@ -392,3 +392,35 @@ without context; a lone pending message still receives its five preceding posts.
 **Still open (flagged to George, not changed)**: an undated entry ages out after 14
 days rather than when its event passes — "Miles, next lab, posted Aug 23" shows
 through Sep 6 whether or not that lab already happened.
+
+## 2026-08-31 — Session 5 (cont.) — /joke + /joke-reply (BUILT, untested live)
+
+**Spec (George)**: interactive joke. Bot asks a question, user answers via a second
+command, bot delivers the punchline. Decisions: PUBLIC · per-person · mixed
+general/kitchen flavour · IN-MEMORY (forget on restart, and say so frankly when a
+/joke-reply has no pending joke).
+
+**Built** — NEW joke.py + two commands in bot.py.
+- new_joke(): one call returns BOTH halves (strict JSON schema, temperature 1.0 for
+  variety); setup returned, punchline stored in _pending[discord_id].
+- answer(): pops the joke, makes a small reaction call, returns
+  (setup, guess, reaction, punchline). Reaction call is try/except'd — a flaky
+  second call must never cost the user their punchline.
+- Reaction prompt explicitly forbids revealing/hinting the punchline (it's printed
+  immediately after, so a leak kills the beat).
+- Joke prompt: clean/workplace-safe, never about a real person, no knock-knock
+  (needs three turns), ~1 in 3 kitchen/game-dev flavoured.
+
+**Design note kept in the module docstring**: generating the punchline AFTER the
+guess was considered and rejected. It reads as more interactive but the model would
+be improvising an answer to a question it never had an answer to.
+
+**Verified offline** (OpenAI stubbed): happy path, no-pending frank message, joke
+consumed after one answer, per-person isolation, /joke twice replaces rather than
+stacks, reaction-failure still delivers the punchline, and a simulated restart
+clearing _pending.
+
+**Flagged, not done**: timeoff.py and joke.py now each carry their own OpenAI
+client getter. A third OpenAI feature should trigger a shared openai_client.py.
+
+**Next**: deploy + try it. Nothing else pending on this one.

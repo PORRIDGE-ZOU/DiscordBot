@@ -437,3 +437,68 @@ client getter. A third OpenAI feature should trigger a shared openai_client.py.
   display name since the guest fix on 2026-07-10. That string is what /help shows.
 - Rendered both offline from the real source: 20 commands, none orphaned into
   "Other", 1501 chars against Discord's 2000 cap.
+
+## 2026-08-31 — Session 5 (cont.) — /joke quality pass + theme option
+
+George: jokes were "awful plain" and not cooking-y enough.
+
+**Diagnosis**: a bare "Tell me a joke." user turn at temperature 1.0 collapses onto
+the handful of most over-told jokes in the training data. Temperature alone does not
+fix mode collapse when the prompt is byte-identical every call.
+
+**Fixes**
+- RANDOM CONCRETE ANCHOR per request (_ANCHORS, 37 kitchen nouns): "build it around
+  ONE of: deglazing, a mandoline, the ticket rail". This is the actual fix — a
+  specific noun has to be invented against, a generic "cooking joke" does not.
+  85/15 kitchen vs game-dev split, verified 175/25 over 200 draws.
+- Cooking promoted to explicit house style in the system prompt.
+- BANNED-cliché list (scarecrow/outstanding in his field, chicken crossing the road,
+  skeleton no guts, impasta, ketchup/catch up, loafing bread, two-tired, atoms,
+  nacho cheese) + "if your first idea is one you've told a thousand times, discard it".
+- Quality rules: be specific, punchline must be a genuine double meaning, aim for
+  almost-guessable.
+- _recent deque(25) of setups fed back as "do not reuse or reword these" — kills
+  in-session repetition. In-memory, dies with the process like _pending.
+- NEW optional `theme` arg on /joke. Theme wins over the cooking default; echoed in
+  the reply as "(theme: x)".
+
+**Prompt-injection note**: `theme` is user text. It goes in the USER turn, quoted and
+labelled "requested by a user", and the system prompt states a theme is a topic
+suggestion that never overrides the content rules. Verified a hostile theme string
+lands as quoted data.
+
+**Bug I introduced and the test caught**: the game-dev branch still said "Tell a
+cooking joke" while offering build-server anchors — contradictory instructions in the
+same sentence. The 40/40 cooking count in the first test run was the tell. Subject
+line is now derived from the pool.
+
+## 2026-08-31 — Session 5 (cont.) — /joke served from a local pack (200 jokes)
+
+George asked whether jokes could be scraped from the web and bundled to avoid API
+tokens. **Declined the scrape** — joke sites' curated lists are their content, and a
+compilation is protected even when individual gags are old. Offered alternatives; he
+chose: Claude writes them, they ship with the bot.
+
+**NEW jokes.json** — 200 original jokes I wrote (100 food, 100 general), each a
+question setup + the punchline answering it, all under 120 chars, no duplicates, and
+avoiding the exhausted ones (scarecrow, chicken/road, impasta, ketchup, two-tired,
+nacho cheese, skeleton). Plain JSON so George can prune what doesn't land — that
+curation IS the fix for "the jokes are bad"; a model asked on demand gives its median
+joke forever.
+
+**joke.py rewritten**
+- No API call to tell a joke. _load_packs() reads jokes.json once; _draw() deals from
+  a SHUFFLED DECK per pack rather than random.choice — with 200 jokes independent
+  picks hit a repeat ~50% of the time within 17 draws (birthday problem). Verified:
+  first repeat at draw #137 of 200.
+- FOOD_WEIGHT = 0.75, one tunable constant. Verified 153/47 over 200 draws.
+- `theme` argument REMOVED from /joke (George). _ANCHORS, _GAMEDEV_ANCHORS,
+  _JOKE_PROMPT, _JOKE_SCHEMA, _recent, _build_request all deleted — dead once the
+  pack landed.
+- The guess REACTION stays live: reacting to what someone actually typed can't be
+  canned. It's already try/except'd, so a missing OPENAI_API_KEY now degrades to a
+  reaction-less punchline instead of an error.
+- /joke no longer defer()s — a dict lookup is well inside Discord's 3s window, so
+  the joke appears instantly.
+
+**Cost**: telling a joke is now free; only the guess reaction costs anything.

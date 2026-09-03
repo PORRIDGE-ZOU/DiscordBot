@@ -1,0 +1,807 @@
+{
+  "_comment": "Jokes told by /joke. Edit freely: delete any that do not land, add your own. Each entry is a question setup and the punchline that answers it. No API call is made to tell one.",
+  "food": [
+    {
+      "setup": "Why did the whisk refuse to settle the argument?",
+      "punchline": "It only knows how to beat around the bowl."
+    },
+    {
+      "setup": "Why is a roux so good at keeping secrets?",
+      "punchline": "It never lets anything separate."
+    },
+    {
+      "setup": "Why did the chef alphabetise the mise en place?",
+      "punchline": "So nothing would be out of order during service."
+    },
+    {
+      "setup": "Why does the sous-vide bag get invited everywhere?",
+      "punchline": "It's wonderful under pressure."
+    },
+    {
+      "setup": "Why did the pan suddenly get sentimental?",
+      "punchline": "Someone deglazed and brought it all back up."
+    },
+    {
+      "setup": "Why is proofing dough such a good listener?",
+      "punchline": "It just sits there and rises to the occasion."
+    },
+    {
+      "setup": "Why was the creme brulee torch banned from meetings?",
+      "punchline": "It kept roasting everyone."
+    },
+    {
+      "setup": "Why is the mandoline the most dangerous instrument in the kitchen?",
+      "punchline": "It shreds without any practice."
+    },
+    {
+      "setup": "Why did the bechamel win the debate?",
+      "punchline": "It was far too smooth to counter."
+    },
+    {
+      "setup": "Why did the garnish get left off the invoice?",
+      "punchline": "It was only ever there for show."
+    },
+    {
+      "setup": "Why did the dishwasher win employee of the month?",
+      "punchline": "He came clean about everything."
+    },
+    {
+      "setup": "Why did the chef propose in the walk-in freezer?",
+      "punchline": "He wanted to see if she'd warm up to him."
+    },
+    {
+      "setup": "Why did the line cook bring a ladder to work?",
+      "punchline": "He heard the orders were stacking up."
+    },
+    {
+      "setup": "Why did the ticket rail go to therapy?",
+      "punchline": "It had too much hanging on it."
+    },
+    {
+      "setup": "Why did the food truck break up with the restaurant?",
+      "punchline": "It needed space to move on."
+    },
+    {
+      "setup": "Why is a sourdough starter the neediest roommate?",
+      "punchline": "It eats daily and never does the dishes."
+    },
+    {
+      "setup": "Why is cast iron so good at holding a grudge?",
+      "punchline": "It never lets go of the heat."
+    },
+    {
+      "setup": "Why did the espresso machine file a complaint?",
+      "punchline": "It was under nine bars of pressure."
+    },
+    {
+      "setup": "Why did the knife visit the sharpener every week?",
+      "punchline": "It was losing its edge."
+    },
+    {
+      "setup": "Why did the plate get promoted?",
+      "punchline": "Outstanding presentation."
+    },
+    {
+      "setup": "Why is the stock pot the wisest thing in the kitchen?",
+      "punchline": "It's been simmering on it for hours."
+    },
+    {
+      "setup": "Why did the kimchi get so confident?",
+      "punchline": "It had been fermenting the idea for months."
+    },
+    {
+      "setup": "Why did the food critic never finish a meal?",
+      "punchline": "He had too many reservations."
+    },
+    {
+      "setup": "Why is a tasting menu like a long meeting?",
+      "punchline": "Nine courses and you still leave hungry."
+    },
+    {
+      "setup": "Why did the leftovers get so philosophical?",
+      "punchline": "They'd had three days to think it over."
+    },
+    {
+      "setup": "Why is meal prep the most optimistic thing you can do on a Sunday?",
+      "punchline": "It assumes you'll still want that on Thursday."
+    },
+    {
+      "setup": "Why did the souffle leave the party early?",
+      "punchline": "One bit of criticism and it collapsed."
+    },
+    {
+      "setup": "Why does the apron know everything?",
+      "punchline": "It's been tied to every conversation in the kitchen."
+    },
+    {
+      "setup": "Why is the pass the loneliest spot in the kitchen?",
+      "punchline": "Everything leaves and nothing stays."
+    },
+    {
+      "setup": "Why did the reservation book get anxious?",
+      "punchline": "It was fully committed."
+    },
+    {
+      "setup": "Why did the toast take the blame?",
+      "punchline": "It was already burnt out."
+    },
+    {
+      "setup": "Why is the spice rack the gossip of the kitchen?",
+      "punchline": "It has something to say about everything."
+    },
+    {
+      "setup": "Why did the egg stay out of the argument?",
+      "punchline": "It didn't want to get beaten."
+    },
+    {
+      "setup": "Why did the baguette apologise?",
+      "punchline": "It had been a little crusty lately."
+    },
+    {
+      "setup": "What did the cheddar say at the meeting?",
+      "punchline": "Nothing. It was far too mature."
+    },
+    {
+      "setup": "Why did the soup get the corner office?",
+      "punchline": "It had the most stock."
+    },
+    {
+      "setup": "Why was the salad so smug?",
+      "punchline": "It was well dressed and it knew it."
+    },
+    {
+      "setup": "Why is pizza always so confident?",
+      "punchline": "It knows everyone wants a piece."
+    },
+    {
+      "setup": "Why did the sushi chef stay so calm?",
+      "punchline": "He'd learned to roll with it."
+    },
+    {
+      "setup": "Why is spaghetti the worst at keeping plans?",
+      "punchline": "It always gets tangled."
+    },
+    {
+      "setup": "Why did the rice get promoted?",
+      "punchline": "It knew how to stick with the team."
+    },
+    {
+      "setup": "Why did the beans start a podcast?",
+      "punchline": "They had so much to spill."
+    },
+    {
+      "setup": "Why did the coffee break up with the kettle?",
+      "punchline": "Things got too heated."
+    },
+    {
+      "setup": "Why is tea so patient?",
+      "punchline": "It knows everything takes steeping."
+    },
+    {
+      "setup": "Why did the cake go to therapy?",
+      "punchline": "It kept falling apart in layers."
+    },
+    {
+      "setup": "Why does the pie always get invited back?",
+      "punchline": "It knows how to fill a room."
+    },
+    {
+      "setup": "Why did the ice cream take the blame?",
+      "punchline": "It melts under questioning."
+    },
+    {
+      "setup": "Why did the grill get elected?",
+      "punchline": "It handled every hot topic."
+    },
+    {
+      "setup": "Why is the oven so dramatic?",
+      "punchline": "With it, everything is a slow burn."
+    },
+    {
+      "setup": "Why did the microwave lose the argument?",
+      "punchline": "It kept going round in circles."
+    },
+    {
+      "setup": "Why was the blender thrown off the panel?",
+      "punchline": "It mixed up everyone's points."
+    },
+    {
+      "setup": "Why is the fridge such a good roommate?",
+      "punchline": "It stays cool and keeps everything to itself."
+    },
+    {
+      "setup": "Why did the butter get the job?",
+      "punchline": "It knew how to spread itself around."
+    },
+    {
+      "setup": "Why did the salt apologise?",
+      "punchline": "It had been a bit much lately."
+    },
+    {
+      "setup": "Why did the pepper win the debate?",
+      "punchline": "Every point had a kick."
+    },
+    {
+      "setup": "Why was sugar banned from negotiations?",
+      "punchline": "It sweetened every deal until nothing was left."
+    },
+    {
+      "setup": "Why is honey never in a rush?",
+      "punchline": "It knows it'll get there eventually."
+    },
+    {
+      "setup": "Why did the lemon start therapy?",
+      "punchline": "It had a lot of bitterness to work through."
+    },
+    {
+      "setup": "Why did the avocado miss the party?",
+      "punchline": "It had eleven minutes of being ready and slept through them."
+    },
+    {
+      "setup": "Why did the banana stop mid-sentence?",
+      "punchline": "It had already split."
+    },
+    {
+      "setup": "Why is the tomato so indecisive?",
+      "punchline": "It still can't decide if it's a fruit."
+    },
+    {
+      "setup": "Why did the mushroom stay in the dark?",
+      "punchline": "That's where it does its best work."
+    },
+    {
+      "setup": "Why did the potato get promoted?",
+      "punchline": "It had eyes everywhere."
+    },
+    {
+      "setup": "Why did the broccoli get elected?",
+      "punchline": "It had an awful lot of little supporters."
+    },
+    {
+      "setup": "Why was the corn so uncomfortable?",
+      "punchline": "Everyone kept staring at its ears."
+    },
+    {
+      "setup": "Why did the garlic leave the party?",
+      "punchline": "It could tell it had lingered too long."
+    },
+    {
+      "setup": "Why did the steak keep quiet in the meeting?",
+      "punchline": "It didn't want to be grilled."
+    },
+    {
+      "setup": "Why is bacon so persuasive?",
+      "punchline": "It appeals to everyone's weaknesses."
+    },
+    {
+      "setup": "Why did the donut go back to school?",
+      "punchline": "It felt empty inside."
+    },
+    {
+      "setup": "Why did the pancake apologise?",
+      "punchline": "It had been flipping out."
+    },
+    {
+      "setup": "Why did the waffle lose the debate?",
+      "punchline": "It kept waffling."
+    },
+    {
+      "setup": "Why did the cereal quit?",
+      "punchline": "It got tired of being milked."
+    },
+    {
+      "setup": "Why did the chocolate stay home?",
+      "punchline": "It had a total meltdown."
+    },
+    {
+      "setup": "Why is a sandwich such a good mediator?",
+      "punchline": "It gets between everyone."
+    },
+    {
+      "setup": "Why did the burger stay humble?",
+      "punchline": "It knew it was mostly filler."
+    },
+    {
+      "setup": "Why are fries such good friends?",
+      "punchline": "They always turn up in a group."
+    },
+    {
+      "setup": "Why did the taco leave early?",
+      "punchline": "It couldn't hold itself together."
+    },
+    {
+      "setup": "Why did the dumpling stay shut?",
+      "punchline": "It kept everything inside."
+    },
+    {
+      "setup": "Why did the curry get a standing ovation?",
+      "punchline": "It had real depth."
+    },
+    {
+      "setup": "Why is tofu so agreeable?",
+      "punchline": "It takes on whatever the room is doing."
+    },
+    {
+      "setup": "Why is ramen never rushed?",
+      "punchline": "The broth refuses to be hurried."
+    },
+    {
+      "setup": "Why is dim sum the best meeting format?",
+      "punchline": "Everything arrives in small, manageable pieces."
+    },
+    {
+      "setup": "Why is barbecue the most patient food?",
+      "punchline": "It's been waiting since six in the morning."
+    },
+    {
+      "setup": "Why is a buffet so exhausting?",
+      "punchline": "Too many options and nobody to blame."
+    },
+    {
+      "setup": "Why did the candle quit the birthday cake?",
+      "punchline": "It was burnt out at the top."
+    },
+    {
+      "setup": "Why did the pot roast get the promotion?",
+      "punchline": "It had spent years in a low, slow position."
+    },
+    {
+      "setup": "Why did the fried egg get told off?",
+      "punchline": "It couldn't stop flipping the conversation."
+    },
+    {
+      "setup": "Why did the pastry chef get audited?",
+      "punchline": "The books were full of layers."
+    },
+    {
+      "setup": "Why did the recipe get rewritten?",
+      "punchline": "Nobody could follow it to the letter."
+    },
+    {
+      "setup": "Why did the measuring cup get therapy?",
+      "punchline": "It never felt full."
+    },
+    {
+      "setup": "Why did the timer get so unpopular?",
+      "punchline": "It only ever brought bad news."
+    },
+    {
+      "setup": "Why did the freezer burn get an apology?",
+      "punchline": "It had been ignored at the back for months."
+    },
+    {
+      "setup": "Why did the sauce get pulled from the menu?",
+      "punchline": "It couldn't hold together under heat."
+    },
+    {
+      "setup": "Why did the bread knife get a warning?",
+      "punchline": "It kept cutting people off."
+    },
+    {
+      "setup": "Why is the pepper grinder so tense?",
+      "punchline": "It's been wound up all evening."
+    },
+    {
+      "setup": "Why did the tea towel resign?",
+      "punchline": "It was tired of being thrown over someone's shoulder."
+    },
+    {
+      "setup": "Why did the menu get redesigned?",
+      "punchline": "Nobody was reading past the starters."
+    },
+    {
+      "setup": "Why did the chef stop trusting the thermometer?",
+      "punchline": "It only ever told him what he already suspected."
+    },
+    {
+      "setup": "Why was the pantry so smug?",
+      "punchline": "It had everything sorted."
+    },
+    {
+      "setup": "Why did the marinade get the credit?",
+      "punchline": "It did all the work overnight while everyone slept."
+    }
+  ],
+  "general": [
+    {
+      "setup": "Why did the cloud take the day off?",
+      "punchline": "It was feeling overcast."
+    },
+    {
+      "setup": "Why did the sun get a glowing review?",
+      "punchline": "It showed up every single day."
+    },
+    {
+      "setup": "Why did the moon skip dinner?",
+      "punchline": "It was already full."
+    },
+    {
+      "setup": "Why did the star get stage fright?",
+      "punchline": "Too many people were looking up to it."
+    },
+    {
+      "setup": "Why is the comet always late?",
+      "punchline": "It only comes around every few decades."
+    },
+    {
+      "setup": "Why is Saturn so confident?",
+      "punchline": "It's got a great ring to it."
+    },
+    {
+      "setup": "Why did gravity get promoted?",
+      "punchline": "It kept everyone grounded."
+    },
+    {
+      "setup": "Why did the calendar get nervous?",
+      "punchline": "Its days were numbered."
+    },
+    {
+      "setup": "Why was the clock sent to the principal?",
+      "punchline": "It kept ticking people off."
+    },
+    {
+      "setup": "Why did the alarm clock get fired?",
+      "punchline": "It kept going off on the job."
+    },
+    {
+      "setup": "Why is the battery always exhausted?",
+      "punchline": "It's constantly drained."
+    },
+    {
+      "setup": "Why is a keyboard never lonely?",
+      "punchline": "It has so many characters."
+    },
+    {
+      "setup": "Why did the mouse get promoted?",
+      "punchline": "It always clicked with people."
+    },
+    {
+      "setup": "Why did the printer join a band?",
+      "punchline": "It had fantastic paper jams."
+    },
+    {
+      "setup": "Why did the phone stay home?",
+      "punchline": "It had no service to offer."
+    },
+    {
+      "setup": "Why was the email ignored?",
+      "punchline": "It buried the important part at the bottom."
+    },
+    {
+      "setup": "Why is the spreadsheet so smug?",
+      "punchline": "It has every cell figured out."
+    },
+    {
+      "setup": "Why did the password go to therapy?",
+      "punchline": "It had too many special characters."
+    },
+    {
+      "setup": "Why did the piano get locked out?",
+      "punchline": "It lost its keys."
+    },
+    {
+      "setup": "Why did the guitar start counselling?",
+      "punchline": "There was too much tension in its strings."
+    },
+    {
+      "setup": "Why did the violin apologise?",
+      "punchline": "It had been highly strung."
+    },
+    {
+      "setup": "Why did the trumpet get in trouble?",
+      "punchline": "It kept blowing its own horn."
+    },
+    {
+      "setup": "Why is the metronome such a bore?",
+      "punchline": "It only ever makes the same point."
+    },
+    {
+      "setup": "Why did the choir get lost?",
+      "punchline": "Nobody would take the lead."
+    },
+    {
+      "setup": "Why did the sloth get the job?",
+      "punchline": "It was worth the wait."
+    },
+    {
+      "setup": "Why is an owl such a bad gossip?",
+      "punchline": "It only ever asks who."
+    },
+    {
+      "setup": "Why is the penguin always so formal?",
+      "punchline": "It never takes the suit off."
+    },
+    {
+      "setup": "Why did the giraffe get in trouble?",
+      "punchline": "It stuck its neck out."
+    },
+    {
+      "setup": "Why did the turtle miss the deadline?",
+      "punchline": "It carries its whole workload on its back."
+    },
+    {
+      "setup": "Why is a bee never lost?",
+      "punchline": "It follows the hive mind."
+    },
+    {
+      "setup": "Why did the ant get promoted?",
+      "punchline": "It carried ten times its own weight."
+    },
+    {
+      "setup": "Why did the cat decline the meeting?",
+      "punchline": "It had already napped through the agenda."
+    },
+    {
+      "setup": "Why is a dog the best colleague?",
+      "punchline": "It's thrilled you came back from lunch."
+    },
+    {
+      "setup": "Why did the fish stay out of it?",
+      "punchline": "It didn't want to get into school politics."
+    },
+    {
+      "setup": "Why was the crab sent home?",
+      "punchline": "It kept moving sideways on every issue."
+    },
+    {
+      "setup": "Why did the octopus win the argument?",
+      "punchline": "It had a hand in everything."
+    },
+    {
+      "setup": "Why did the snail file a complaint?",
+      "punchline": "It was tired of being passed over."
+    },
+    {
+      "setup": "Why did the frog get a warning?",
+      "punchline": "It kept jumping to conclusions."
+    },
+    {
+      "setup": "Why did the elephant get the archive job?",
+      "punchline": "It never forgets where anything went."
+    },
+    {
+      "setup": "Why is a kangaroo so good at saving?",
+      "punchline": "It has a built-in pocket."
+    },
+    {
+      "setup": "Why did the bat sleep in?",
+      "punchline": "It had everything upside down."
+    },
+    {
+      "setup": "Why did the chameleon get the job?",
+      "punchline": "It fitted in immediately."
+    },
+    {
+      "setup": "Why did the thunder apologise?",
+      "punchline": "It came on far too loud."
+    },
+    {
+      "setup": "Why was the fog let go?",
+      "punchline": "Nobody could see what it was doing."
+    },
+    {
+      "setup": "Why is snow so polite?",
+      "punchline": "It always covers for everyone."
+    },
+    {
+      "setup": "Why did the wind get complaints?",
+      "punchline": "It kept blowing off the meeting."
+    },
+    {
+      "setup": "Why does the rainbow always wait?",
+      "punchline": "It only shows up once things clear."
+    },
+    {
+      "setup": "Why did the tree get the corner office?",
+      "punchline": "It had the deepest roots."
+    },
+    {
+      "setup": "Why was the cactus left alone?",
+      "punchline": "Nobody wanted to get too close."
+    },
+    {
+      "setup": "Why is the sunflower such a good employee?",
+      "punchline": "It always faces the light."
+    },
+    {
+      "setup": "Why did the seed stay quiet?",
+      "punchline": "It was still developing its point."
+    },
+    {
+      "setup": "Why did the ivy get a warning?",
+      "punchline": "It was climbing over everyone."
+    },
+    {
+      "setup": "Why did the book stay up all night?",
+      "punchline": "It couldn't put itself down."
+    },
+    {
+      "setup": "Why is the dictionary always invited?",
+      "punchline": "It has a word for everything."
+    },
+    {
+      "setup": "Why was the poem rejected?",
+      "punchline": "It didn't have the right meter for the job."
+    },
+    {
+      "setup": "Why did the comma resign?",
+      "punchline": "It needed a longer pause."
+    },
+    {
+      "setup": "Why did the question mark start counselling?",
+      "punchline": "It doubted everything."
+    },
+    {
+      "setup": "Why was the exclamation mark asked to sit down?",
+      "punchline": "It couldn't stop shouting."
+    },
+    {
+      "setup": "Why did the triangle stay out of it?",
+      "punchline": "It didn't want another side."
+    },
+    {
+      "setup": "Why did the circle get the job?",
+      "punchline": "It had no bad angles."
+    },
+    {
+      "setup": "Why did zero apologise?",
+      "punchline": "It felt like nothing."
+    },
+    {
+      "setup": "Why did the equation break up?",
+      "punchline": "The two sides stopped balancing."
+    },
+    {
+      "setup": "Why did the sprinter refuse the meeting?",
+      "punchline": "Nothing there could be finished in ten seconds."
+    },
+    {
+      "setup": "Why did the goalkeeper start therapy?",
+      "punchline": "Everything came at them."
+    },
+    {
+      "setup": "Why did the referee lose all his friends?",
+      "punchline": "Somebody always disagreed with the call."
+    },
+    {
+      "setup": "Why did the boxer stay quiet?",
+      "punchline": "He'd learned never to lead with his chin."
+    },
+    {
+      "setup": "Why did the chess player get the job?",
+      "punchline": "She'd already planned the next six moves."
+    },
+    {
+      "setup": "Why is the swimmer so calm in a crisis?",
+      "punchline": "She's used to being in over her head."
+    },
+    {
+      "setup": "Why did the bus become so popular?",
+      "punchline": "It always arrived in threes."
+    },
+    {
+      "setup": "Why did the train stay on topic?",
+      "punchline": "It had nowhere else to go."
+    },
+    {
+      "setup": "Why did the bicycle lean on the wall?",
+      "punchline": "It couldn't stand on its own."
+    },
+    {
+      "setup": "Why did the aeroplane apologise?",
+      "punchline": "It had been a bit above everyone lately."
+    },
+    {
+      "setup": "Why did the boat need counselling?",
+      "punchline": "It kept feeling anchored to the past."
+    },
+    {
+      "setup": "Why did the elevator get promoted?",
+      "punchline": "It had its ups and downs but always turned up."
+    },
+    {
+      "setup": "Why is the escalator never really broken?",
+      "punchline": "At worst it becomes stairs."
+    },
+    {
+      "setup": "Why does everyone respect the traffic light?",
+      "punchline": "It knows exactly when to stop."
+    },
+    {
+      "setup": "Why does the roundabout confuse everyone?",
+      "punchline": "Nobody can tell when to leave."
+    },
+    {
+      "setup": "Why did the meeting run long?",
+      "punchline": "Someone asked if there were any questions."
+    },
+    {
+      "setup": "Why did the intern get the credit?",
+      "punchline": "They were the only one who read the document."
+    },
+    {
+      "setup": "Why was the calendar invite declined?",
+      "punchline": "No agenda and a full hour."
+    },
+    {
+      "setup": "Why did the whiteboard get erased?",
+      "punchline": "Someone wrote DO NOT ERASE on it."
+    },
+    {
+      "setup": "Why did the sticky note survive the reorganisation?",
+      "punchline": "Nobody could work out whose it was."
+    },
+    {
+      "setup": "Why was the pencil sent to the office?",
+      "punchline": "It kept making its point too sharply."
+    },
+    {
+      "setup": "Why did the eraser get promoted?",
+      "punchline": "It cleaned up everyone else's mistakes."
+    },
+    {
+      "setup": "Why did the stapler get territorial?",
+      "punchline": "Somebody kept borrowing it."
+    },
+    {
+      "setup": "Why did the chair get complaints?",
+      "punchline": "It couldn't support anyone any more."
+    },
+    {
+      "setup": "Why did the ghost skip the party?",
+      "punchline": "It had no body to go with."
+    },
+    {
+      "setup": "Why did the robot apologise?",
+      "punchline": "It had processed things all wrong."
+    },
+    {
+      "setup": "Why did the zombie leave the meeting?",
+      "punchline": "It was already dead on its feet."
+    },
+    {
+      "setup": "Why did the pillow need therapy?",
+      "punchline": "It kept holding everyone's problems."
+    },
+    {
+      "setup": "Why is the blanket always invited back?",
+      "punchline": "It makes everyone comfortable."
+    },
+    {
+      "setup": "Why did the dream end so abruptly?",
+      "punchline": "The alarm had other plans."
+    },
+    {
+      "setup": "Why did the mirror get the promotion?",
+      "punchline": "It reflected well on everyone."
+    },
+    {
+      "setup": "Why did the candle lose its job?",
+      "punchline": "It burned through the whole budget."
+    },
+    {
+      "setup": "Why did the umbrella get left behind?",
+      "punchline": "It only showed up when things got bad."
+    },
+    {
+      "setup": "Why did the shoe file a grievance?",
+      "punchline": "It was being walked all over."
+    },
+    {
+      "setup": "Why did the sock leave?",
+      "punchline": "It was tired of being the odd one out."
+    },
+    {
+      "setup": "Why did the door get counselling?",
+      "punchline": "It had been slammed one time too many."
+    },
+    {
+      "setup": "Why did the staircase get complaints?",
+      "punchline": "It let everyone down."
+    },
+    {
+      "setup": "Why did the lamp get the corner office?",
+      "punchline": "It always threw light on the subject."
+    }
+  ]
+}

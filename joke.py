@@ -1,14 +1,17 @@
 """Interactive two-part jokes: the bot asks, you guess, the bot pays it off.
 
-The whole joke — setup AND punchline — is written in one call, and only the setup
-is shown. The punchline is held in memory until you answer.
+The jokes come from `jokes.json`, a fixed pack shipped with the bot — 100 food and
+100 general, weighted towards food. Telling a joke costs NO API call and is
+instant: no waiting on a model to think one up, and it still works when the API key
+is missing or OpenAI is down.
 
-Doing it the other way round (write the setup now, improvise the punchline after
-the guess) reads as more interactive but is worse: the model would be inventing an
-answer to a question it had no particular answer to, so the payoff rarely lands.
-Committing to the punchline up front means there really was something to guess.
-What makes it feel alive is the one-line reaction to your guess, not a late-bound
-punchline.
+The pack is a plain JSON file precisely so it can be curated. A model asked for a
+joke on demand gives you its median joke forever; a file lets you delete the ones
+that don't land, and they stay deleted.
+
+The only thing still generated live is the one-line reaction to YOUR guess — that
+part can't be canned, because reacting to what someone actually typed is the whole
+point of the interaction. It degrades to silence if the call fails.
 
 Pending jokes live in a plain dict — deliberately NOT in botstate.db. A restart
 forgets every joke in flight, which is the intended behaviour: a stale punchline
@@ -21,12 +24,18 @@ Discord. The client is synchronous, so async callers use asyncio.to_thread.
 
 import json
 import os
+import random
 
 from openai import OpenAI
 
 # discord_user_id -> {"setup": str, "punchline": str}
 # Module-level, so it dies with the process. One joke in flight per person.
 _pending = {}
+
+# Shuffled decks, one per pack, dealt from until empty then reshuffled. Lives in
+# memory alongside _pending, so a restart reshuffles — which is fine.
+_decks = {}
+
 
 _client = None
 
@@ -44,41 +53,53 @@ def _model():
     return os.environ.get("OPENAI_MODEL", "gpt-4o")
 
 
-_JOKE_SCHEMA = {
-    "type": "object",
-    "additionalProperties": False,
-    "properties": {
-        "setup": {
-            "type": "string",
-            "description": "The joke's question. One sentence, under 120 characters.",
-        },
-        "punchline": {
-            "type": "string",
-            "description": "The answer to that question. Under 120 characters.",
-        },
-    },
-    "required": ["setup", "punchline"],
-}
+_JOKES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jokes.json")
 
-_JOKE_PROMPT = """\
-You are Sous Chef, a Discord bot for a student game-dev team building a narrative
-restaurant sim. Write ONE short, silly, original joke in two parts: a setup phrased as
-a QUESTION, and the punchline that answers it.
+# Chance a joke is drawn from the food pack rather than the general one. The bot is
+# named after a kitchen role and lives in a restaurant-sim team's server, so food is
+# the house style — tune this one number to change the mix.
+FOOD_WEIGHT = 0.75
 
-STYLE
-- Mostly everyday silly jokes. Roughly one in three can riff on cooking, diners, or
-  game development — never force the theme, and never explain the reference.
-- Wordplay and puns are ideal. Aim for a punchline someone could *almost* guess.
-- Short. Setup and punchline both under 120 characters.
+_packs = None
 
-RULES
-- Keep it clean and workplace-safe: nothing about politics, religion, appearance, or
-  anyone's identity, and never a joke about a specific real person.
-- Do NOT use the knock-knock format. The setup must be a single question that can be
-  answered in one go.
-- The punchline must actually answer the setup. No non-sequiturs.
-- Vary your material — avoid the most over-told jokes.\
-"""
+
+def _load_packs():
+    """Read jokes.json once. Missing or malformed = a clear error, not a silent
+    empty bot."""
+    global _packs
+    if _packs is None:
+        with open(_JOKES_PATH, encoding="utf-8") as f:
+            data = json.load(f)
+        packs = {
+            name: [j for j in data.get(name, []) if j.get("setup") and j.get("punchline")]
+            for name in ("food", "general")
+        }
+        if not packs["food"] and not packs["general"]:
+            raise ValueError(f"{_JOKES_PATH} has no usable jokes")
+        _packs = packs
+    return _packs
+
+
+def _draw():
+    """Pick a joke, preferring ones not told yet this run.
+
+    Shuffled decks rather than independent random picks: with 200 jokes and plain
+    random choice you'd hit a repeat surprisingly early (the birthday problem —
+    about a 50/50 chance within ~17 jokes). Dealing from a shuffled deck means no
+    repeat until the deck is exhausted.
+    """
+    packs = _load_packs()
+    name = "food" if random.random() < FOOD_WEIGHT else "general"
+    if not packs[name]:  # a pack emptied by editing jokes.json — use the other
+        name = "general" if name == "food" else "food"
+
+    deck = _decks.get(name)
+    if not deck:
+        deck = list(packs[name])
+        random.shuffle(deck)
+        _decks[name] = deck
+    return deck.pop()
+
 
 _REACTION_PROMPT = """\
 You are Sous Chef, a Discord bot, running a joke on a student game-dev team's server.
@@ -98,33 +119,14 @@ your whole reply, no preamble.\
 
 
 def new_joke(discord_id):
-    """Write a fresh joke, remember the punchline, return the setup.
+    """Take a joke from the pack, remember the punchline, return the setup.
 
-    Replaces any joke this person already had pending — running /joke twice just
-    means you'd rather have a different one. Blocking (HTTP); call via to_thread.
+    No network call — this is a dict lookup. Replaces any joke this person already
+    had pending; running /joke twice just means you'd rather have a different one.
     """
-    response = _get_client().chat.completions.create(
-        model=_model(),
-        # High temperature on purpose: the same prompt every time, so the sampling is
-        # the only thing keeping the jokes from repeating.
-        temperature=1.0,
-        messages=[
-            {"role": "system", "content": _JOKE_PROMPT},
-            {"role": "user", "content": "Tell me a joke."},
-        ],
-        response_format={
-            "type": "json_schema",
-            "json_schema": {"name": "joke", "strict": True, "schema": _JOKE_SCHEMA},
-        },
-    )
-    data = json.loads(response.choices[0].message.content)
-    setup = (data.get("setup") or "").strip()
-    punchline = (data.get("punchline") or "").strip()
-    if not setup or not punchline:
-        raise ValueError("the joke came back missing a half")
-
-    _pending[discord_id] = {"setup": setup, "punchline": punchline}
-    return setup
+    joke = _draw()
+    _pending[discord_id] = {"setup": joke["setup"], "punchline": joke["punchline"]}
+    return joke["setup"]
 
 
 def has_pending(discord_id):

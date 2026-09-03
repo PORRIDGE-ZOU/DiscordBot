@@ -928,16 +928,15 @@ async def time_off_this_month(ctx: discord.ApplicationContext):
 async def joke(ctx: discord.ApplicationContext):
     """Ask for a joke. Only the setup is revealed; the punchline waits for a guess.
 
-    Public, unlike most commands here — a joke nobody else can see isn't much of a
-    joke. Running it again replaces whatever you had pending."""
-    await ctx.defer()
+    The joke comes from the local pack (jokes.json), so this costs no API call and
+    answers instantly. Public, unlike most commands here — a joke nobody else can see
+    isn't much of a joke. Running it again replaces whatever you had pending."""
     try:
         setup = await asyncio.to_thread(joke_api.new_joke, ctx.author.id)
-    except KeyError as e:
-        await ctx.respond(f"⚠️ Missing config: `{e.args[0]}` isn't set in my `.env`.")
-        return
     except Exception as e:
-        await ctx.respond(f"Couldn't think of one: `{e}`")
+        # No defer() above: reading the pack is a dict lookup, comfortably inside
+        # Discord's 3-second window. Only a broken jokes.json lands here.
+        await ctx.respond(f"My joke book is unreadable: `{e}`")
         return
 
     await ctx.respond(

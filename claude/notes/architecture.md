@@ -15,8 +15,10 @@ store.py          # Local bot state: Discord<->Notion associations, current spri
                   #   time-off parse cache. stdlib sqlite3 (botstate.db).
 timeoff.py        # #time-off channel -> dated entries. OpenAI (sync SDK, to_thread).
                   #   Knows nothing about Discord; bot.py hands it plain dicts.
-joke.py           # /joke + /joke-reply. OpenAI. Pending jokes in a MODULE-LEVEL
-                  #   DICT on purpose -> a restart forgets them.
+joke.py           # /joke + /joke-reply. Jokes come from jokes.json (NO API call);
+                  #   only the guess-reaction hits OpenAI. Pending jokes in a
+                  #   MODULE-LEVEL DICT on purpose -> a restart forgets them.
+jokes.json        # 200 curated jokes (100 food / 100 general). Edit freely.
 requirements.txt  # py-cord, python-dotenv, notion-client, apscheduler, SQLAlchemy
 .env / .env.example  # secrets by name; real values only in .env (gitignored)
 README.md         # human setup + run + command reference
@@ -87,10 +89,10 @@ claude/           # Claude's workspace (tasks, notes, decisions, memory)
 - All windowing in America/Los_Angeles dates. Dated entries match by RANGE OVERLAP.
 
 ## Joke layer (Milestone 7)
-- Setup AND punchline generated in ONE call; only the setup is shown, punchline
-  held in _pending[discord_id]. Improvising the punchline after the guess was
-  considered and rejected — the payoff doesn't land when there was no committed
-  answer to find.
+- Setup + punchline come from jokes.json; only the setup is shown, punchline held
+  in _pending[discord_id]. Telling a joke costs no tokens and needs no API key.
+- _draw() deals from a shuffled deck per pack, not random.choice — independent picks
+  repeat far sooner than people expect (birthday problem). FOOD_WEIGHT=0.75.
 - Second (small) call reacts to the guess. Wrapped in try/except: if it fails the
   punchline still lands. The garnish must never cost the meal.
 - In-memory by design (George): restart forgets, /joke-reply says so plainly.

@@ -59,6 +59,13 @@ Applies to sqlite (store.py) too — it's blocking; wrap in to_thread.
 - Model output is normalised + validated in code before use (timeoff._clean_entry):
   a malformed date is DROPPED, never rendered. A confidently-wrong calendar row is
   worse than a missing one.
+- OpenAI calls must work on REASONING models (GPT-6 family is all reasoning): never
+  send `temperature` or `max_tokens`; use `max_completion_tokens` with headroom, since
+  thinking tokens count against it (a cap of 80 can yield empty output).
+- Anything cached from a model's output keys on the MODEL too, so switching models
+  re-derives instead of inheriting stale results.
+- A swallowed exception still gets LOGGED (stderr -> journalctl). Swallow for the
+  user's sake, never for the developer's.
 - Timezone-sensitive features name their zone explicitly (timeoff.LA,
   scheduler.CALIFORNIA). Never rely on the server's local time.
 

@@ -502,3 +502,100 @@ joke forever.
   the joke appears instantly.
 
 **Cost**: telling a joke is now free; only the guess reaction costs anything.
+
+## 2026-10-02 — Session 6 — /setsprint "no sprint column" + whole-bot verification
+
+George: `/setsprint` replied "This Notion database has no sprint column" while his
+board clearly has a `Sprints` relation column ("Sprint 6"). Then asked me to check
+again after running `/setsprint Sprint 6` (reply not shared).
+
+**Diagnosis**: code is correct. Built a fake Notion matching his board that EVALUATES
+filters. Fresh process: role map sprint -> Sprints; 'Sprint 6'/'sprint6'/'6'/'SPRINT-6'
+all set Sprint 6; unknown sprint lists the real six; /tasks filter selects exactly
+George's two Sprint 6 tasks (excludes his Sprint 5 task and Hailey's Sprint 6 task).
+**Stale-cache scenario reproduces his original message verbatim** -> that was a process
+started before the column existed. Restart is the fix. Same cause silently dropped the
+sprint filter from /tasks and /sprinttasks.
+
+**Real bug found** (not yet fixed — awaiting approval): `_relation_index`'s bare
+`except Exception` + cache. See gotchas.md. Proposed fix: cache empty only on
+APIResponseError object_not_found / restricted_resource; re-raise and don't cache
+everything else.
+
+**Regression suite**: old scratchpad tests were wiped between sessions. Wrote one
+consolidated assert-based suite (scratchpad/regression_suite.py) — 44/44 pass across
+notion_api, store (temp db, never the real one), timeoff, joke, bot.py surface.
+Offered to commit it as tests/ so George can run it himself.
+
+**Pending George**: (1) what /setsprint Sprint 6 actually replied, (2) approve the
+_relation_index fix, (3) approve the honest "no sprint column" wording (proposed last
+turn), (4) whether to commit the regression suite.
+
+**Update (same session)** — /setsprint STILL said "no sprint column" after George ran it
+again. Then:
+- George's /notion_check output showed only the page list: **my /notion_check was broken**.
+  It appended the role/column diagnostic AFTER the page list, then truncated at 1990
+  chars. With 486 shared pages (every task row is a page) the diagnostic never rendered.
+  I'd only ever tested it with a handful of pages.
+- Read-only local diagnostic (approved): local .env NOTION_TASKS_DB_ID -> a DB titled
+  "Task Tracker" (the ORIGINAL May board, `Sprint` select). Local config is two
+  migrations stale and says nothing about EC2.
+- Most likely cause on EC2: NOTION_TASKS_DB_ID still points at an older board with no
+  sprint column (July's "Master Tasks Tracker" had none) while the token sees the
+  current workspace. Gave George a one-line read-only command to confirm on EC2.
+
+**Fixed /notion_check** (approved): diagnostic FIRST, now including the database TITLE
+and data-source count (warns if >1, since we only read [0]); page list capped at 10 +
+"… and N more"; data_source results titled properly; types in backticks so Discord
+doesn't eat the underscores. `_title_of` uses obj.get("object") — no KeyError.
+Verified with the real handler (ast-extracted) on 486 items: 844 chars, all sections
+visible. Regression 44/44.
+
+**Still pending George**: the EC2 command's output; _relation_index bare-except fix;
+honest "no sprint column" wording; committing the regression suite.
+
+**ROOT CAUSE FOUND (same session)** — EC2 command output: DB = "Master Task List",
+1 source, correct id. My wrong-DB-id hypothesis was WRONG. Schema listed 16 columns —
+every one EXCEPT Sprints, Epic, Projects, i.e. all and only the relation columns.
+Notion hides a relation column from the integration's schema when the linked DB isn't
+shared with it. QLP Bot is connected to Master Task List but not to the Sprints DB.
+Fix (George): share Sprints DB (+ optionally Epic, Projects) -> rerun EC2 command to
+confirm ('Sprints','relation') appears -> restart -> /setsprint Sprint 6.
+
+My docs + the match_sprint "can't read" error were built on a wrong model of this
+(column visible, names unresolvable). Corrected gotchas.md. Proposed (awaiting
+approval): message naming the real cause, doc corrections, _relation_index fix.
+
+New columns since last look: Created by (created_by), Place (place — unknown type,
+_prop_value returns "" harmlessly), Sunday Before Due (date — `due` still resolves to
+"Due date" by alias, so no clash).
+
+**CONFIRMED** — George shared the Sprints DB with QLP Bot; EC2 schema now includes
+('Sprints', 'relation'). Hidden-relation cause proven. Epic + Projects still absent
+(their DBs unshared — optional). Next: /setsprint Sprint 6, /tasks sprint-scoped.
+Corrections still awaiting approval: honest "no sprint column" wording naming the
+unshared-linked-DB cause; doc fixes (wrong "1 linked" symptom in README/deep-dive/
+explainer/how-to); _relation_index bare-except fix; commit regression suite.
+
+## 2026-10-04 — Session 6 (cont.) — model switch gpt-4o -> gpt-6.1-sol
+
+George asked for the newest GPT. Checked OpenAI's docs (not memory — knowledge cutoff
+predates it): GPT-6 Astra ($10/$50, most capable), GPT-6.1 Sol ($2/$10, newest, near-
+Astra), GPT-6 Luna ($0.10/$0.50). All REASONING models. Recommended Sol; George
+confirmed his key has access (models.retrieve printed gpt-6.1-sol).
+
+**Changes (approved)**
+- Default model gpt-4o -> gpt-6.1-sol in timeoff._model() and joke._model();
+  OPENAI_MODEL in .env still overrides. .env.example comment updated.
+- Dropped `temperature` from both calls (reasoning models may reject it).
+- joke reaction: max_tokens=80 -> max_completion_tokens=2000. Reasoning tokens count
+  against the cap; 80 could produce an empty reaction that the try/except would hide.
+- joke reaction failures now print to stderr -> journalctl.
+- timeoff._cache_key includes the model -> switching re-parses the channel once with
+  Sol instead of serving gpt-4o parses forever.
+- Regression suite extended with 10 parameter checks: 54/54.
+
+Docs could not confirm whether GPT-6 rejects temperature/max_tokens — the changes are
+safe either way, and max_completion_tokens is accepted by gpt-4o too.
+Still duplicated: _get_client/_model live in both timeoff.py and joke.py (two places
+to change the default — exactly the cost flagged earlier).

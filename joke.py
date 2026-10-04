@@ -25,6 +25,7 @@ Discord. The client is synchronous, so async callers use asyncio.to_thread.
 import json
 import os
 import random
+import sys
 
 from openai import OpenAI
 
@@ -50,7 +51,7 @@ def _get_client():
 
 
 def _model():
-    return os.environ.get("OPENAI_MODEL", "gpt-4o")
+    return os.environ.get("OPENAI_MODEL", "gpt-6.1-sol")
 
 
 _JOKES_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jokes.json")
@@ -149,8 +150,12 @@ def answer(discord_id, guess):
     try:
         response = _get_client().chat.completions.create(
             model=_model(),
-            temperature=1.0,
-            max_tokens=80,
+            # Generous on purpose. A reasoning model spends part of this budget
+            # THINKING before it writes anything, so a tight cap (this used to be 80)
+            # can leave zero visible output. The prompt keeps the reply to 25 words.
+            # `max_completion_tokens` rather than `max_tokens`, and no `temperature`:
+            # both work on every current model, reasoning or not.
+            max_completion_tokens=2000,
             messages=[
                 {"role": "system", "content": _REACTION_PROMPT},
                 {
@@ -164,7 +169,10 @@ def answer(discord_id, guess):
             ],
         )
         reaction = (response.choices[0].message.content or "").strip()
-    except Exception:
+    except Exception as e:
+        # Still never costs the user their punchline — but say why in the logs
+        # (journalctl -u qlpbot), so a broken reaction doesn't go unnoticed.
+        print(f"[joke] reaction call failed ({_model()}): {e!r}", file=sys.stderr)
         reaction = ""
 
     return joke["setup"], guess, reaction, joke["punchline"]

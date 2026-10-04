@@ -33,12 +33,16 @@ Each alone breaks the filter, and the failure modes differ:
 Only the middle one is loud. Fix was to resolve columns by ROLE from the live schema
 and build filters from the reported type (see conventions.md).
 
-## Notion sharing does NOT cascade across a relation
+## Notion sharing does NOT cascade across a relation — and the column VANISHES
 Sharing the task DB with the connection does not share a database it merely LINKS to.
-A relation column then returns page ids the bot can't resolve to titles — the Sprints
-DB must be shared separately (••• -> Connections). Tell: sprints display as
-"N linked" instead of "Sprint 1", and /setsprint reports the column links to a
-database the bot can't read.
+**CORRECTED 2026-10-02:** I originally wrote that the relation column would still
+appear with unresolvable ids ("N linked"). WRONG. Notion OMITS the relation column from
+data_sources.retrieve entirely when its target DB isn't shared. Proven on EC2: schema
+returned every column EXCEPT Sprints, Epic, Projects — exactly the three relations.
+So the real symptom is "no sprint column" (role unresolved), and the "links to a
+database the bot can't read" branch in match_sprint essentially never fires.
+Tell: every relation column missing while every other column (even `place`) is present.
+Fix: share each linked DB (Sprints, Epic, Projects) with the connection, then restart.
 
 ## Relation filters take a PAGE ID, not the label
 `{"relation": {"contains": "<page-id>"}}`. Resolving "Sprint 1" -> id needs a query
@@ -72,3 +76,36 @@ An entry with no derivable date is shown for UNRESOLVED_VALID_DAYS (14) after
 posting. If the session it refers to already happened — or is two months out — the
 window is simply wrong. Undated entries should be read as "someone flagged
 something", not as "this person is out this week".
+
+## A bare `except Exception` that CACHES its failure turns one blip into a permanent lie
+Found 2026-10-02 while verifying /setsprint end to end. `notion_api._relation_index`
+wraps the related-DB query in `except Exception`, treats ANY failure as "that database
+isn't shared with the connection", and caches the empty result for the life of the
+process. So a 429, a gateway timeout, or a plain bug (my own test fake triggered a
+KeyError) all become: /setsprint says "add the bot's connection, then restart" —
+permanently, until restart. It misdirected ME during testing; it would misdirect George.
+
+The SDK already distinguishes the cases (notion_client.errors.APIErrorCode):
+- genuinely unshared: object_not_found, restricted_resource  -> safe to cache as empty
+- transient: rate_limited, internal_server_error, service_unavailable, gateway_timeout,
+  RequestTimeoutError                                         -> must NOT be cached
+- anything else (KeyError etc.) is a bug                      -> must surface
+
+Generalised: **only cache a negative result when you know it's a stable fact.** An
+exception is not a fact about the world.
+
+## /setsprint "no sprint column" with a Sprints column visible = stale schema cache
+Reproduced George's exact message word for word by loading a schema without Sprints:
+the process started before the column existed and _schema/_roles never refresh.
+Restart fixes it. Same root cause silently drops the sprint filter from /tasks.
+
+## A diagnostic appended after a variable-length list will be truncated away
+/notion_check put its role map after the shared-pages list, then cut at Discord's 2000
+chars. Real workspaces share hundreds of pages (every DB row is a page), so the part
+that mattered never showed. Rule: in any Discord reply, put the fixed-size essential
+content FIRST and cap variable-length lists with "… and N more". Test with realistic
+volume, not five items.
+
+## Local .env and EC2 .env drift independently
+Local pointed at the May board while EC2 had moved on twice. Never treat local config
+as evidence about the server; check on the server.

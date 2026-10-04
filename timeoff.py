@@ -71,7 +71,7 @@ def _get_client():
 
 def _model():
     """Overridable in .env so the model can change without a code edit."""
-    return os.environ.get("OPENAI_MODEL", "gpt-4o")
+    return os.environ.get("OPENAI_MODEL", "gpt-6.1-sol")
 
 
 def channel_id():
@@ -233,7 +233,9 @@ def _parse_batch(batch, context):
     payload = "\n".join(parts + [_format_for_model(i, m) for i, m in enumerate(batch)])
     response = _get_client().chat.completions.create(
         model=_model(),
-        temperature=0,  # deterministic: the same message should parse the same way
+        # No `temperature` (or token cap) here: GPT-6-family reasoning models may
+        # reject them, and exact repeatability buys nothing — each message is parsed
+        # once and cached.
         messages=[
             {"role": "system", "content": _SYSTEM_PROMPT},
             {"role": "user", "content": payload},
@@ -298,13 +300,19 @@ def _as_date(value):
 
 
 def _cache_key(text, context):
-    """Hash of the message AND the conversation around it.
+    """Hash of the message, the conversation around it, AND the model.
 
     Context is part of the key because it changes the answer: "I also can't make it"
-    parses differently depending on what came before. When the surrounding messages
-    change, the parse is redone rather than served stale from cache.
+    parses differently depending on what came before. The model is part of it for the
+    same reason — switching OPENAI_MODEL should mean the new model re-reads the
+    channel once, not that it inherits the old model's parses forever.
     """
-    blob = text + "\n||CONTEXT||\n" + "\n".join(m.get("text", "") for m in context)
+    blob = (
+        f"model={_model()}\n"
+        + text
+        + "\n||CONTEXT||\n"
+        + "\n".join(m.get("text", "") for m in context)
+    )
     return _hash(blob)
 
 

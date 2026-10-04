@@ -102,24 +102,26 @@ async def notion_check(ctx: discord.ApplicationContext):
         )
         return
 
-    lines = [f"- {title}  ·  _{otype}_" for title, otype, _id in items]
-    body = f"Connection can see **{len(items)}** item(s):\n" + "\n".join(lines)
-
-    # Second half: how the bot READS the task database. Every task command resolves
-    # what it needs (title, assignee, due date, sprint…) against the live schema, so
-    # this map is the fastest way to see why a command is filtering wrong — a role
-    # showing "—" means the bot found no column for it.
+    # The task-database diagnostic goes FIRST. It's the reason this command exists,
+    # and with hundreds of shared pages (every task row is a page) the list below
+    # would otherwise push it past Discord's 2000-character cut and it'd never show.
     try:
         info = await asyncio.to_thread(notion_api.describe_schema)
     except Exception as e:
-        body += f"\n\n**Task database:** couldn't read the schema — `{e}`"
+        body = f"**Task database:** couldn't read it — `{e}`"
     else:
         roles = "\n".join(
             f"- `{role}` → {col if col else '— *(none found)*'}"
             for role, col in info["roles"].items()
         )
         cols = ", ".join(f"{name} (`{ptype}`)" for name, ptype in info["columns"])
-        body += f"\n\n**Task database — what fills each role:**\n{roles}"
+        body = (
+            f"**Task database:** {info['database']} — "
+            f"{info['data_sources']} data source(s)"
+        )
+        if info["data_sources"] > 1:
+            body += " ⚠️ *(I only read the first one)*"
+        body += f"\n\n**What fills each role:**\n{roles}"
         if info["missing_required"]:
             body += (
                 "\n⚠️ **Missing required:** "
@@ -132,6 +134,14 @@ async def notion_check(ctx: discord.ApplicationContext):
                 + ", ".join(info["missing_optional"])
             )
         body += f"\n\n**Columns ({len(info['columns'])}):** {cols}"
+
+    # Then a short sample of what the connection can see. Backticks rather than
+    # italics: Discord reads the underscores in `data_source` as markdown.
+    shown = 10
+    sample = "\n".join(f"- {title}  ·  `{otype}`" for title, otype, _id in items[:shown])
+    body += f"\n\n**Connection can see {len(items)} item(s)**, e.g.:\n{sample}"
+    if len(items) > shown:
+        body += f"\n… and {len(items) - shown} more"
 
     await ctx.respond(_truncate(body, 1990), ephemeral=True)
 

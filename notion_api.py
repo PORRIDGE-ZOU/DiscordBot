@@ -53,8 +53,8 @@ def _title_of(obj):
 
     Notion stores titles differently for databases vs pages, so we handle each.
     """
-    if obj["object"] == "database":
-        return _rich_text_to_plain(obj.get("title", [])) or "(untitled database)"
+    if obj.get("object") in ("database", "data_source"):
+        return _rich_text_to_plain(obj.get("title", [])) or f"(untitled {obj['object']})"
     # A page's title lives inside whichever property has type "title".
     for prop in obj.get("properties", {}).values():
         if prop.get("type") == "title":
@@ -208,6 +208,7 @@ ROLE_DISPLAY_ORDER = (
 # Everything below is cached PER PROCESS — restart the bot after any Notion
 # schema change so it re-reads.
 _data_source_id = None
+_db_meta = None      # {"title": str, "sources": int} — shown by /notion_check
 _schema = None       # {prop_name: {"type": ..., ...}} for the task data source
 _roles = None        # {role: column name or None}
 _relation_cache = {}  # prop_name -> {"by_id": {...}, "by_norm": {...}}
@@ -221,12 +222,19 @@ def _norm(text):
 
 def _get_tasks_data_source_id():
     """Resolve + cache the task database's data source id from NOTION_TASKS_DB_ID."""
-    global _data_source_id
+    global _data_source_id, _db_meta
     if _data_source_id is None:
         client = _get_client()
         db_id = os.environ["NOTION_TASKS_DB_ID"]  # KeyError = id missing from .env
         db = client.databases.retrieve(database_id=db_id)
         sources = db.get("data_sources", [])
+        # Kept for /notion_check: the database's TITLE is the fastest way to notice the
+        # bot is pointed at the wrong board, and >1 source means we may be reading the
+        # wrong one (we always read the first).
+        _db_meta = {
+            "title": _rich_text_to_plain(db.get("title", [])) or "(untitled database)",
+            "sources": len(sources),
+        }
         if not sources:
             raise RuntimeError(
                 "Task database reports no data sources — check NOTION_TASKS_DB_ID "
@@ -320,6 +328,8 @@ def describe_schema():
     schema = _get_schema()
     roles = resolve_roles()
     return {
+        "database": (_db_meta or {}).get("title", "?"),
+        "data_sources": (_db_meta or {}).get("sources", 0),
         "roles": dict(roles),
         "missing_required": [r for r in REQUIRED_ROLES if not roles.get(r)],
         "missing_optional": [
